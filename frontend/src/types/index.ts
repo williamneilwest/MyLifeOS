@@ -1,6 +1,6 @@
 export type ProjectStatus = 'Backlog' | 'In Progress' | 'Blocked' | 'Complete';
 
-export interface ProjectItem {
+export interface Project {
   id: string;
   name: string;
   status: ProjectStatus;
@@ -8,6 +8,20 @@ export interface ProjectItem {
   link?: string;
   tags: string[];
   updatedAt: string;
+}
+
+export type TaskPriority = 'low' | 'medium' | 'high';
+export type TaskStatus = 'todo' | 'in-progress' | 'done';
+
+export interface Task {
+  id: string;
+  title: string;
+  dueDate: string;
+  priority: TaskPriority;
+  status: TaskStatus;
+  completed: boolean;
+  notes?: string;
+  projectId?: string;
 }
 
 export type FinanceEntryType = 'income' | 'expense' | 'savings';
@@ -19,6 +33,18 @@ export interface FinanceEntry {
   amount: number;
   type: FinanceEntryType;
   date: string;
+}
+
+export type GoalCadence = 'weekly' | 'monthly' | 'quarterly';
+
+export interface PlanningItem {
+  id: string;
+  title: string;
+  scenario?: string;
+  notes?: string;
+  cadence: GoalCadence;
+  targetDate: string;
+  progress: number;
 }
 
 export interface HomePlanInput {
@@ -54,3 +80,6 @@ export interface HomePlanResult {
   frontEndRatio: number;
   affordabilityStatus: 'Healthy' | 'Tight' | 'Risky';
 }
+
+// Backward-compatible aliases used by existing module code.
+export type ProjectItem = Project;

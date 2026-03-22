@@ -1,12 +1,7 @@
-export type GoalCadence = 'weekly' | 'monthly' | 'quarterly';
+import type { GoalCadence, PlanningItem } from '../../types';
 
-export interface PlanningGoal {
-  id: string;
-  title: string;
-  cadence: GoalCadence;
-  targetDate: string;
-  progress: number;
-}
+export type { GoalCadence };
+export type PlanningGoal = PlanningItem;
 
 export interface PlanningOverview {
   weeklyGoals: number;

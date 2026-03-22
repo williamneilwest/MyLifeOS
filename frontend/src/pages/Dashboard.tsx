@@ -8,58 +8,94 @@ import { ProjectGrid } from '../modules/dashboard/components/ProjectGrid';
 import { QuickActions } from '../modules/dashboard/components/QuickActions';
 import { Recommendation, RecommendationsPanel } from '../modules/dashboard/components/RecommendationsPanel';
 import { RightSidebar } from '../modules/dashboard/components/RightSidebar';
+import { useFinance } from '../modules/finance/hooks/useFinance';
+import { usePlanning } from '../modules/planning/hooks/usePlanning';
+import { useProjects } from '../modules/projects/hooks/useProjects';
+import { useTasks } from '../modules/tasks/hooks/useTasks';
+
+function toGridStatus(status: string): 'running' | 'idle' | 'blocked' {
+  if (status === 'In Progress') {
+    return 'running';
+  }
+
+  if (status === 'Blocked') {
+    return 'blocked';
+  }
+
+  return 'idle';
+}
 
 export function Dashboard() {
   const navigate = useNavigate();
   const [focusMode, setFocusMode] = useState(false);
 
+  const { projects } = useProjects();
+  const { tasks } = useTasks();
+  const { income, expense, savings } = useFinance();
+  const { goals } = usePlanning();
+
+  const today = new Date().toISOString().slice(0, 10);
+  const activeTasks = tasks.filter((task) => task.status !== 'done').length;
+  const blockers = projects.filter((project) => project.status === 'Blocked').length;
+  const urgent = tasks.filter((task) => task.priority === 'high' && task.status !== 'done').length;
+  const overdue = tasks.filter((task) => task.dueDate < today && task.status !== 'done').length;
+
   const commandStats = {
-    tasks: 6,
-    blockers: 2,
-    urgent: 3,
-    pending: 11,
-    financialFlow: 'strong',
+    tasks: activeTasks,
+    blockers,
+    urgent,
+    pending: goals.filter((goal) => goal.progress < 100).length,
+    financialFlow: income >= expense ? 'strong' : 'watch',
   };
 
   const recommendations = useMemo<Recommendation[]>(
     () => [
       {
         id: 'r1',
-        title: '2 overdue tasks need triage',
+        title: `${overdue} overdue tasks need triage`,
         detail: 'Clear overdue project reviews to prevent release delays this evening.',
-        severity: 'high',
+        severity: overdue > 0 ? 'high' : 'low',
         actionLabel: 'Open Task Queue',
         onAction: () => navigate('/tasks'),
       },
       {
         id: 'r2',
-        title: 'Spending anomaly detected',
-        detail: 'Dining spend is 18% above your weekly average. Review and categorize.',
-        severity: 'medium',
+        title: 'Spending trend check',
+        detail: 'Review recent expense categories and rebalance if needed.',
+        severity: expense > income * 0.65 ? 'medium' : 'low',
         actionLabel: 'Review Finance',
         onAction: () => navigate('/finance'),
       },
       {
         id: 'r3',
-        title: 'Project risk: dependency lag',
-        detail: 'Main automation flow has one blocked dependency update pending approval.',
-        severity: 'high',
-        actionLabel: 'Resolve Blocker',
+        title: blockers > 0 ? 'Project blockers need attention' : 'Projects moving cleanly',
+        detail: 'Inspect blocked items and resolve dependencies to protect delivery pace.',
+        severity: blockers > 0 ? 'high' : 'low',
+        actionLabel: 'Open Projects',
         onAction: () => navigate('/projects'),
       },
       {
         id: 'r4',
-        title: 'Home goal is on-track',
-        detail: 'You are pacing 4% above monthly target. Consider one extra transfer this week.',
+        title: 'Planning check-in',
+        detail: 'Review goal progress and update target milestones for this week.',
         severity: 'low',
         actionLabel: 'Open Planning',
         onAction: () => navigate('/planning'),
       },
     ],
-    [navigate],
+    [navigate, overdue, expense, income, blockers],
   );
 
   const filteredRecommendations = focusMode ? recommendations.filter((item) => item.severity !== 'low') : recommendations;
+
+  const orderedProjects = [...projects].sort((a, b) => {
+    const aScore = a.status === 'In Progress' ? 3 : a.status === 'Blocked' ? 2 : 1;
+    const bScore = b.status === 'In Progress' ? 3 : b.status === 'Blocked' ? 2 : 1;
+    return bScore - aScore;
+  });
+
+  const primaryProject = orderedProjects[0];
+  const secondaryProjects = orderedProjects.slice(1, 3);
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -97,57 +133,67 @@ export function Dashboard() {
                 id: 'f1',
                 title: 'Daily Orchestration',
                 description: 'Morning workflow bundle and task sync pipeline.',
-                progress: 78,
-                status: 'running',
-                metric: '5 workflows active',
+                progress: activeTasks > 0 ? Math.max(30, 100 - activeTasks * 5) : 90,
+                status: blockers > 0 ? 'idle' : 'running',
+                metric: `${activeTasks} active tasks`,
                 onOpen: () => navigate('/projects'),
               },
               {
                 id: 'f2',
                 title: 'Financial Control Loop',
                 description: 'Budgeting, transaction reconciliation, and allocation checks.',
-                progress: 64,
+                progress: income > 0 ? Math.max(20, Math.min(95, Math.round((1 - expense / income) * 100))) : 50,
                 status: 'idle',
-                metric: '12 checks completed',
+                metric: `${goals.length} tracked goals`,
                 onOpen: () => navigate('/finance'),
               },
             ]}
           />
 
-          <ProjectGrid
-            primary={{
-              id: 'p1',
-              name: 'LifeOS Automation Core',
-              status: 'running',
-              summary: 'Integrating task intelligence and finance signals into one execution path.',
-              keyTasks: ['Finalize blocker resolution flow', 'Ship dashboard recommendation actions', 'Review nightly sync logs'],
-              onOpen: () => navigate('/projects'),
-            }}
-            secondary={[
-              {
-                id: 'p2',
-                name: 'Finance Reporting',
-                status: 'idle',
-                summary: 'Weekly trend cards and category variance alerts.',
+          {primaryProject && (
+            <ProjectGrid
+              primary={{
+                id: primaryProject.id,
+                name: primaryProject.name,
+                status: toGridStatus(primaryProject.status),
+                summary: primaryProject.notes,
+                keyTasks: tasks.slice(0, 3).map((task) => task.title),
+                onOpen: () => navigate('/projects'),
+              }}
+              secondary={secondaryProjects.map((project) => ({
+                id: project.id,
+                name: project.name,
+                status: toGridStatus(project.status),
+                summary: project.notes,
                 keyTasks: [],
-                onOpen: () => navigate('/finance'),
-              },
-              {
-                id: 'p3',
-                name: 'Homelab Reliability',
-                status: 'blocked',
-                summary: 'Dependency patching before next maintenance window.',
-                keyTasks: [],
-                onOpen: () => navigate('/homelab'),
-              },
-            ]}
-          />
+                onOpen: () => navigate('/projects'),
+              }))}
+            />
+          )}
 
           <FinancePanel
             metrics={[
-              { id: 'm1', label: 'Cashflow', value: '+$1,240', delta: '+8.2% week-over-week', trend: 'up' },
-              { id: 'm2', label: 'Savings Rate', value: '26.4%', delta: '+2.1% vs last week', trend: 'up' },
-              { id: 'm3', label: 'Variable Spend', value: '$612', delta: '-4.6% vs last week', trend: 'down' },
+              {
+                id: 'm1',
+                label: 'Cashflow',
+                value: `$${(income - expense).toLocaleString()}`,
+                delta: income >= expense ? 'Positive this cycle' : 'Negative this cycle',
+                trend: income >= expense ? 'up' : 'down',
+              },
+              {
+                id: 'm2',
+                label: 'Savings',
+                value: `$${savings.toLocaleString()}`,
+                delta: 'Current tracked total',
+                trend: 'up',
+              },
+              {
+                id: 'm3',
+                label: 'Variable Spend',
+                value: `$${expense.toLocaleString()}`,
+                delta: 'Current tracked total',
+                trend: 'down',
+              },
             ]}
             onOpenFinance={() => navigate('/finance')}
           />

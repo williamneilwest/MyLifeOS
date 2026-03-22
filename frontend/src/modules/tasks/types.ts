@@ -1,14 +1,7 @@
-export type TaskPriority = 'low' | 'medium' | 'high';
-export type TaskStatus = 'todo' | 'in-progress' | 'done';
+import type { Task, TaskPriority, TaskStatus } from '../../types';
 
-export interface TaskItem {
-  id: string;
-  title: string;
-  dueDate: string;
-  priority: TaskPriority;
-  status: TaskStatus;
-  notes?: string;
-}
+export type { TaskPriority, TaskStatus };
+export type TaskItem = Omit<Task, 'completed'>;
 
 export interface TasksOverview {
   inbox: number;

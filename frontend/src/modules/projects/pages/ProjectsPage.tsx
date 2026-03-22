@@ -3,12 +3,10 @@ import { Badge, Button, Modal, SectionHeader } from '../../../components/ui';
 import { ProjectBoard } from '../components/ProjectBoard';
 import { ProjectForm } from '../components/ProjectForm';
 import { ProjectsOverview } from '../components/ProjectsOverview';
-import { useProjectsStore } from '../state/useProjectsStore';
+import { useProjects } from '../hooks/useProjects';
 
 export function ProjectsPage() {
-  const projects = useProjectsStore((state) => state.projects);
-  const addProject = useProjectsStore((state) => state.addProject);
-  const updateStatus = useProjectsStore((state) => state.updateStatus);
+  const { projects, addProject, updateStatus } = useProjects();
   const [open, setOpen] = useState(false);
 
   const summary = {
@@ -38,7 +36,7 @@ export function ProjectsPage() {
       <Modal title="Create Project" open={open} onClose={() => setOpen(false)}>
         <ProjectForm
           onSubmit={(project) => {
-            addProject(project);
+            void addProject(project);
             setOpen(false);
           }}
         />

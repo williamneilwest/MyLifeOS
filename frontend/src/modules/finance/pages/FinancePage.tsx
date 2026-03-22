@@ -2,14 +2,12 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { Badge, Card, SectionHeader } from '../../../components/ui';
 import { FinanceForm } from '../components/FinanceForm';
 import { FinanceSummary } from '../components/FinanceSummary';
-import { useFinanceInsights } from '../hooks/useFinanceInsights';
-import { useFinanceStore } from '../state/useFinanceStore';
+import { useFinance } from '../hooks/useFinance';
 
 const COLORS = ['#22d3ee', '#38bdf8', '#34d399'];
 
 export function FinancePage() {
-  const addEntry = useFinanceStore((state) => state.addEntry);
-  const { entries, income, expense, savings, net, fixedTarget, saveTarget } = useFinanceInsights();
+  const { addEntry, entries, income, expense, savings, net, fixedTarget, saveTarget } = useFinance();
 
   const grouped = [
     { name: 'Income', value: income },
@@ -50,7 +48,11 @@ export function FinancePage() {
           <h3 className="text-lg font-semibold text-white">Add Entry</h3>
           <p className="mt-1 text-sm text-slate-400">Capture a transaction quickly. API import can replace this later.</p>
           <div className="mt-5">
-            <FinanceForm onSubmit={addEntry} />
+            <FinanceForm
+              onSubmit={(entry) => {
+                void addEntry(entry);
+              }}
+            />
           </div>
         </Card>
       </section>

@@ -2,13 +2,10 @@ import { Badge, Card, SectionHeader } from '../../../components/ui';
 import { TaskForm } from '../components/TaskForm';
 import { TaskList } from '../components/TaskList';
 import { TasksSnapshotCard } from '../components/TasksSnapshotCard';
-import { useTasksData } from '../hooks/useTasksData';
-import { useTasksStore } from '../state/useTasksStore';
+import { useTasks } from '../hooks/useTasks';
 
 export function TasksPage() {
-  const { tasks, overview } = useTasksData();
-  const addTask = useTasksStore((state) => state.addTask);
-  const updateTaskStatus = useTasksStore((state) => state.updateTaskStatus);
+  const { tasks, overview, addTask, updateTaskStatus } = useTasks();
 
   return (
     <div className="space-y-6">
@@ -24,7 +21,11 @@ export function TasksPage() {
       <Card>
         <h3 className="text-lg font-semibold text-white">Capture Task</h3>
         <div className="mt-4">
-          <TaskForm onSubmit={addTask} />
+          <TaskForm
+            onSubmit={(task) => {
+              void addTask(task);
+            }}
+          />
         </div>
       </Card>
 

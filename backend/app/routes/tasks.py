@@ -1,3 +1,5 @@
+from datetime import datetime, UTC
+
 from flask import Blueprint, jsonify, request
 
 from ..db import db
@@ -10,7 +12,15 @@ tasks_bp = Blueprint('tasks', __name__)
 @tasks_bp.get('/tasks')
 def get_tasks():
     tasks = Task.query.order_by(Task.created_at.desc()).all()
-    return jsonify([task.to_dict() for task in tasks])
+    return jsonify({
+        'data': [task.to_dict() for task in tasks],
+        'lastUpdated': datetime.now(UTC).isoformat(),
+    })
+
+
+@tasks_bp.get('/tasks/last-updated')
+def get_tasks_last_updated():
+    return jsonify({'lastUpdated': datetime.now(UTC).isoformat()})
 
 
 @tasks_bp.post('/tasks')

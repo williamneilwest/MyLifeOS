@@ -1,5 +1,7 @@
-import type { FinancialSummary } from '../../services/lifeOsService';
-
-export interface FinanceInsight extends FinancialSummary {
+export interface FinanceInsight {
+  monthlyIncome: number;
+  monthlyExpenses: number;
+  savingsRate: number;
+  investmentBalance: number;
   monthlyDelta: number;
 }
