@@ -2,13 +2,10 @@ import { Badge, Card, SectionHeader } from '../../../components/ui';
 import { HomelabServiceForm } from '../components/HomelabServiceForm';
 import { HomelabServicesTable } from '../components/HomelabServicesTable';
 import { HomelabStatusCard } from '../components/HomelabStatusCard';
-import { useHomelabData } from '../hooks/useHomelabData';
-import { useHomelabStore } from '../state/useHomelabStore';
+import { useHomelab } from '../hooks/useHomelab';
 
 export function HomelabPage() {
-  const { services, overview } = useHomelabData();
-  const addService = useHomelabStore((state) => state.addService);
-  const updateStatus = useHomelabStore((state) => state.updateStatus);
+  const { services, overview, addService, updateStatus } = useHomelab();
 
   return (
     <div className="space-y-6">
@@ -24,7 +21,11 @@ export function HomelabPage() {
       <Card>
         <h3 className="text-lg font-semibold text-white">Add Service</h3>
         <div className="mt-4">
-          <HomelabServiceForm onSubmit={addService} />
+          <HomelabServiceForm
+            onSubmit={(service) => {
+              void addService(service);
+            }}
+          />
         </div>
       </Card>
 

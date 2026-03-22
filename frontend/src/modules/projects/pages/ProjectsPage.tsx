@@ -6,7 +6,7 @@ import { ProjectsOverview } from '../components/ProjectsOverview';
 import { useProjects } from '../hooks/useProjects';
 
 export function ProjectsPage() {
-  const { projects, addProject, updateStatus } = useProjects();
+  const { projects, addProject, updateStatus, loading, error, successMessage } = useProjects();
   const [open, setOpen] = useState(false);
 
   const summary = {
@@ -30,6 +30,9 @@ export function ProjectsPage() {
       />
 
       <ProjectsOverview summary={summary} />
+      {loading ? <p className="text-sm text-slate-400">Loading projects...</p> : null}
+      {error ? <p className="text-sm text-rose-300">{error}</p> : null}
+      {successMessage ? <p className="text-sm text-emerald-300">{successMessage}</p> : null}
 
       <ProjectBoard projects={projects} onStatusChange={updateStatus} />
 

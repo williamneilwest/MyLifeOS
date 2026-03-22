@@ -5,7 +5,7 @@ import { PlanningSummaryCard } from '../components/PlanningSummaryCard';
 import { usePlanning } from '../hooks/usePlanning';
 
 export function PlanningPage() {
-  const { goals, overview, addGoal, updateProgress } = usePlanning();
+  const { goals, overview, addGoal, updateProgress, loading, error, successMessage } = usePlanning();
 
   return (
     <div className="space-y-6">
@@ -17,6 +17,9 @@ export function PlanningPage() {
       />
 
       <PlanningSummaryCard overview={overview} />
+      {loading ? <p className="text-sm text-slate-400">Loading planning data...</p> : null}
+      {error ? <p className="text-sm text-rose-300">{error}</p> : null}
+      {successMessage ? <p className="text-sm text-emerald-300">{successMessage}</p> : null}
 
       <Card>
         <h3 className="text-lg font-semibold text-white">Add Goal</h3>

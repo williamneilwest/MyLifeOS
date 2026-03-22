@@ -1,17 +1,7 @@
-import { useMemo } from 'react';
-import { useToolsStore } from '../state/useToolsStore';
+import { useTools } from './useTools';
 
 export function useToolsData() {
-  const links = useToolsStore((state) => state.links);
-  const snippets = useToolsStore((state) => state.snippets);
-
-  const overview = useMemo(
-    () => ({
-      links: links.length,
-      snippets: snippets.length,
-    }),
-    [links.length, snippets.length],
-  );
+  const { links, snippets, overview } = useTools();
 
   return {
     links,

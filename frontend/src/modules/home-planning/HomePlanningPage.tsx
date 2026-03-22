@@ -1,14 +1,18 @@
 import { ResponsiveContainer, BarChart, CartesianGrid, Tooltip, XAxis, YAxis, Bar } from 'recharts';
 import { Card } from '../../components/ui/Card';
 import { ChartCard } from '../../components/charts/ChartCard';
-import { useHomePlanningStore } from './state/useHomePlanningStore';
 import { calculateHomePlan } from '../../services/calculations/homeCalculator';
 import { HomePlanForm } from './components/HomePlanForm';
 import { ScenarioTable } from './components/ScenarioTable';
+import { useHomePlanning } from './hooks/useHomePlanning';
 
 export function HomePlanningPage() {
-  const input = useHomePlanningStore((state) => state.input);
-  const updateInput = useHomePlanningStore((state) => state.updateInput);
+  const { input, scenarios, loading, error, updateInput } = useHomePlanning();
+
+  if (loading || !input) {
+    return <div className="text-sm text-slate-400">Loading home planning...</div>;
+  }
+
   const result = calculateHomePlan(input);
 
   const breakdown = [
@@ -34,7 +38,8 @@ export function HomePlanningPage() {
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <Card>
           <h3 className="text-lg font-semibold text-white">Planning inputs</h3>
-          <p className="mt-1 text-sm text-slate-400">Everything persists locally so you can keep tweaking without rebuilding your life every refresh.</p>
+          <p className="mt-1 text-sm text-slate-400">Changes are persisted to the backend so your planning data is shared and durable.</p>
+          {error ? <p className="mt-2 text-sm text-rose-300">{error}</p> : null}
           <div className="mt-6">
             <HomePlanForm input={input} onChange={updateInput} />
           </div>
@@ -75,7 +80,7 @@ export function HomePlanningPage() {
         <h3 className="text-lg font-semibold text-white">Scenario comparison</h3>
         <p className="mt-1 text-sm text-slate-400">Check how average timing shifts when your monthly savings pace changes.</p>
         <div className="mt-5">
-          <ScenarioTable input={input} />
+          <ScenarioTable input={input} scenarios={scenarios} />
         </div>
       </Card>
     </div>

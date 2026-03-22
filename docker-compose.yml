@@ -1,4 +1,18 @@
 services:
+  db:
+    image: postgres:15
+    container_name: lifeos-db
+    environment:
+      POSTGRES_USER: lifeos
+      POSTGRES_PASSWORD: lifeos
+      POSTGRES_DB: lifeos
+    volumes:
+      - lifeos_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - homelab
+
   frontend:
     image: node:20
     container_name: lifeos-frontend
@@ -17,13 +31,17 @@ services:
       context: ./backend   # 👈 THIS is where your Dockerfile is
     container_name: lifeos-backend
     environment:
-      - DATABASE_URL=sqlite:////app/lifeos.db
-    volumes:
-      - ./backend/lifeos.db:/app/lifeos.db
+      - DATABASE_URL=postgresql://lifeos:lifeos@db:5432/lifeos
+    depends_on:
+      - db
     ports:
       - "5000:5000"
     networks:
       - homelab
+
 networks:
   homelab:
     external: true
+
+volumes:
+  lifeos_postgres_data:

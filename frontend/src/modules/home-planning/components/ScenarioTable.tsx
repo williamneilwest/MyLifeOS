@@ -1,12 +1,12 @@
-import { homePlanScenarios } from '../../../data/sampleData';
 import { calculateHomePlan } from '../../../services/calculations/homeCalculator';
-import type { HomePlanInput } from '../../../types';
+import type { HomePlanInput, HomePlanScenario } from '../../../types';
 
 interface ScenarioTableProps {
   input: HomePlanInput;
+  scenarios: HomePlanScenario[];
 }
 
-export function ScenarioTable({ input }: ScenarioTableProps) {
+export function ScenarioTable({ input, scenarios }: ScenarioTableProps) {
   return (
     <div className="overflow-hidden rounded-3xl border border-white/10">
       <table className="min-w-full divide-y divide-white/10 text-left">
@@ -19,7 +19,7 @@ export function ScenarioTable({ input }: ScenarioTableProps) {
           </tr>
         </thead>
         <tbody className="divide-y divide-white/5 bg-slate-950/30">
-          {homePlanScenarios.map((scenario) => {
+          {scenarios.map((scenario) => {
             const result = calculateHomePlan({ ...input, monthlySavings: input.monthlySavings * scenario.multiplier });
             return (
               <tr key={scenario.label}>

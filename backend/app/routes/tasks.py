@@ -1,7 +1,8 @@
 from datetime import UTC, date, datetime
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, request
 
+from ..api_response import error_response, success_response
 from ..db import db
 from ..models import Task
 
@@ -27,19 +28,20 @@ def _tasks_last_updated() -> str:
 
 @tasks_bp.get('/tasks/', strict_slashes=False)
 def get_tasks():
+    current_app.logger.info('[DB] Fetching table: tasks')
     tasks = Task.query.order_by(Task.updated_at.desc(), Task.created_at.desc()).all()
-    return jsonify({'data': [task.to_dict() for task in tasks], 'lastUpdated': _tasks_last_updated()})
+    return success_response({'data': [task.to_dict() for task in tasks], 'lastUpdated': _tasks_last_updated()})
 
 
 @tasks_bp.get('/tasks/last-updated', strict_slashes=False)
 def get_tasks_last_updated():
-    return jsonify({'lastUpdated': _tasks_last_updated()})
+    return success_response({'lastUpdated': _tasks_last_updated()})
 
 
 @tasks_bp.get('/tasks/<int:task_id>', strict_slashes=False)
 def get_task(task_id: int):
     task = Task.query.get_or_404(task_id)
-    return jsonify(task.to_dict())
+    return success_response(task.to_dict())
 
 
 @tasks_bp.post('/tasks/', strict_slashes=False)
@@ -48,7 +50,7 @@ def create_task():
     title = str(data.get('title', '')).strip()
 
     if not title:
-        return jsonify({'error': 'title is required'}), 400
+        return error_response('title is required', 400)
 
     task = Task(
         title=title,
@@ -63,7 +65,7 @@ def create_task():
     db.session.add(task)
     db.session.commit()
 
-    return jsonify(task.to_dict()), 201
+    return success_response(task.to_dict(), 201)
 
 
 @tasks_bp.patch('/tasks/<int:task_id>', strict_slashes=False)
@@ -74,7 +76,7 @@ def update_task(task_id: int):
     if 'title' in data:
         title = str(data['title']).strip()
         if not title:
-            return jsonify({'error': 'title cannot be empty'}), 400
+            return error_response('title cannot be empty', 400)
         task.title = title
 
     if 'completed' in data:
@@ -91,7 +93,7 @@ def update_task(task_id: int):
         task.project_id = str(data['projectId']) if data['projectId'] else None
 
     db.session.commit()
-    return jsonify(task.to_dict())
+    return success_response(task.to_dict())
 
 
 @tasks_bp.delete('/tasks/<int:task_id>', strict_slashes=False)
@@ -99,4 +101,4 @@ def delete_task(task_id: int):
     task = Task.query.get_or_404(task_id)
     db.session.delete(task)
     db.session.commit()
-    return '', 204
+    return success_response({'deleted': True})

@@ -3,12 +3,10 @@ import { CommandSnippetList } from '../components/CommandSnippetList';
 import { ModuleVisibilityCard } from '../components/ModuleVisibilityCard';
 import { QuickLinkForm } from '../components/QuickLinkForm';
 import { ToolsSummaryCard } from '../components/ToolsSummaryCard';
-import { useToolsData } from '../hooks/useToolsData';
-import { useToolsStore } from '../state/useToolsStore';
+import { useTools } from '../hooks/useTools';
 
 export function ToolsPage() {
-  const { links, snippets, overview } = useToolsData();
-  const addLink = useToolsStore((state) => state.addLink);
+  const { links, snippets, overview, addLink } = useTools();
 
   return (
     <div className="space-y-6">
@@ -46,7 +44,11 @@ export function ToolsPage() {
         <Card>
           <h3 className="text-lg font-semibold text-white">Add Link</h3>
           <div className="mt-4">
-            <QuickLinkForm onSubmit={addLink} />
+            <QuickLinkForm
+              onSubmit={(link) => {
+                void addLink(link);
+              }}
+            />
           </div>
         </Card>
       </section>
