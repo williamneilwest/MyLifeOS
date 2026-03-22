@@ -3,32 +3,22 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light dark;
+  color-scheme: dark;
 }
 
-html, body, #root {
-  min-height: 100%;
+html,
+body,
+#root {
+  height: 100%;
 }
 
 body {
-  @apply bg-slate-100 text-slate-900 antialiased;
-  background-image:
-    radial-gradient(circle at top left, rgba(14, 116, 144, 0.12), transparent 30%),
-    radial-gradient(circle at top right, rgba(16, 185, 129, 0.12), transparent 28%),
-    linear-gradient(to bottom right, #e2e8f0, #f8fafc 40%, #e2e8f0);
-}
-
-.dark body {
-  @apply bg-slate-950 text-slate-100;
-  background-image:
-    radial-gradient(circle at top left, rgba(34, 211, 238, 0.14), transparent 30%),
-    radial-gradient(circle at top right, rgba(52, 211, 153, 0.12), transparent 28%),
-    linear-gradient(to bottom right, #020617, #0f172a 45%, #020617);
+  @apply bg-zinc-950 text-zinc-200 antialiased;
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+  scrollbar-color: rgba(161, 161, 170, 0.4) transparent;
 }
 
 ::-webkit-scrollbar {
@@ -37,20 +27,20 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.35);
+  background: rgba(161, 161, 170, 0.35);
   border-radius: 999px;
 }
 
 @layer components {
   .glass-panel {
-    @apply border border-white/10 bg-white/5 backdrop-blur-xl shadow-glow;
+    @apply border border-white/10 bg-zinc-800/60 backdrop-blur-md shadow-lg;
   }
 
   .muted-text {
-    @apply text-sm text-slate-400;
+    @apply text-sm text-zinc-400;
   }
 
   .section-title {
-    @apply text-xl font-semibold tracking-tight text-white;
+    @apply text-xl font-semibold tracking-tight text-zinc-200;
   }
 }
