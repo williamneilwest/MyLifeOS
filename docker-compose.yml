@@ -16,6 +16,10 @@ services:
     build:
       context: ./backend   # 👈 THIS is where your Dockerfile is
     container_name: lifeos-backend
+    environment:
+      - DATABASE_URL=sqlite:////app/lifeos.db
+    volumes:
+      - ./backend/lifeos.db:/app/lifeos.db
     ports:
       - "5000:5000"
     networks:

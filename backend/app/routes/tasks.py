@@ -1,4 +1,4 @@
-from datetime import datetime, UTC
+from datetime import UTC, date, datetime
 
 from flask import Blueprint, jsonify, request
 
@@ -9,21 +9,40 @@ from ..models import Task
 tasks_bp = Blueprint('tasks', __name__)
 
 
-@tasks_bp.get('/tasks')
+def _parse_date(value: str | None) -> date | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _tasks_last_updated() -> str:
+    last = db.session.query(db.func.max(Task.updated_at)).scalar()
+    if isinstance(last, datetime):
+        return last.replace(tzinfo=UTC).isoformat()
+    return datetime.now(UTC).isoformat()
+
+
+@tasks_bp.get('/tasks/', strict_slashes=False)
 def get_tasks():
-    tasks = Task.query.order_by(Task.created_at.desc()).all()
-    return jsonify({
-        'data': [task.to_dict() for task in tasks],
-        'lastUpdated': datetime.now(UTC).isoformat(),
-    })
+    tasks = Task.query.order_by(Task.updated_at.desc(), Task.created_at.desc()).all()
+    return jsonify({'data': [task.to_dict() for task in tasks], 'lastUpdated': _tasks_last_updated()})
 
 
-@tasks_bp.get('/tasks/last-updated')
+@tasks_bp.get('/tasks/last-updated', strict_slashes=False)
 def get_tasks_last_updated():
-    return jsonify({'lastUpdated': datetime.now(UTC).isoformat()})
+    return jsonify({'lastUpdated': _tasks_last_updated()})
 
 
-@tasks_bp.post('/tasks')
+@tasks_bp.get('/tasks/<int:task_id>', strict_slashes=False)
+def get_task(task_id: int):
+    task = Task.query.get_or_404(task_id)
+    return jsonify(task.to_dict())
+
+
+@tasks_bp.post('/tasks/', strict_slashes=False)
 def create_task():
     data = request.get_json(silent=True) or {}
     title = str(data.get('title', '')).strip()
@@ -31,14 +50,23 @@ def create_task():
     if not title:
         return jsonify({'error': 'title is required'}), 400
 
-    task = Task(title=title)
+    task = Task(
+        title=title,
+        completed=bool(data.get('completed', False)),
+        due_date=_parse_date(data.get('dueDate')),
+        priority=str(data.get('priority') or 'medium'),
+        status=str(data.get('status') or 'todo'),
+        notes=(str(data.get('notes')).strip() if data.get('notes') is not None else None),
+        project_id=(str(data.get('projectId')).strip() if data.get('projectId') else None),
+    )
+
     db.session.add(task)
     db.session.commit()
 
     return jsonify(task.to_dict()), 201
 
 
-@tasks_bp.patch('/tasks/<int:task_id>')
+@tasks_bp.patch('/tasks/<int:task_id>', strict_slashes=False)
 def update_task(task_id: int):
     data = request.get_json(silent=True) or {}
     task = Task.query.get_or_404(task_id)
@@ -51,12 +79,22 @@ def update_task(task_id: int):
 
     if 'completed' in data:
         task.completed = bool(data['completed'])
+    if 'dueDate' in data:
+        task.due_date = _parse_date(data.get('dueDate'))
+    if 'priority' in data:
+        task.priority = str(data.get('priority') or task.priority)
+    if 'status' in data:
+        task.status = str(data.get('status') or task.status)
+    if 'notes' in data:
+        task.notes = str(data['notes']) if data['notes'] is not None else None
+    if 'projectId' in data:
+        task.project_id = str(data['projectId']) if data['projectId'] else None
 
     db.session.commit()
     return jsonify(task.to_dict())
 
 
-@tasks_bp.delete('/tasks/<int:task_id>')
+@tasks_bp.delete('/tasks/<int:task_id>', strict_slashes=False)
 def delete_task(task_id: int):
     task = Task.query.get_or_404(task_id)
     db.session.delete(task)
