@@ -30,6 +30,7 @@ def _tasks_last_updated() -> str:
 def get_tasks():
     current_app.logger.info('[DB] Fetching table: tasks')
     tasks = Task.query.order_by(Task.updated_at.desc(), Task.created_at.desc()).all()
+    current_app.logger.info('[DB] tasks rows returned: %s', len(tasks))
     return success_response({'data': [task.to_dict() for task in tasks], 'lastUpdated': _tasks_last_updated()})
 
 

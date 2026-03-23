@@ -1,5 +1,6 @@
 import { Activity, CircleDollarSign, FolderKanban, ListChecks, TerminalSquare } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { CommandCenter } from '../modules/dashboard/components/CommandCenter';
 import { FeaturedCards } from '../modules/dashboard/components/FeaturedCards';
@@ -12,6 +13,7 @@ import { useFinance } from '../modules/finance/hooks/useFinance';
 import { usePlanning } from '../modules/planning/hooks/usePlanning';
 import { useProjects } from '../modules/projects/hooks/useProjects';
 import { useTasks } from '../modules/tasks/hooks/useTasks';
+import { getDashboardSummary } from '../services/api';
 
 function toGridStatus(status: string): 'running' | 'idle' | 'blocked' {
   if (status === 'In Progress') {
@@ -29,23 +31,35 @@ export function Dashboard() {
   const navigate = useNavigate();
   const [focusMode, setFocusMode] = useState(false);
 
-  const { projects } = useProjects();
-  const { tasks } = useTasks();
-  const { income, expense, savings } = useFinance();
-  const { goals } = usePlanning();
+  const { projects, loading: projectsLoading, error: projectsError } = useProjects();
+  const { tasks, loading: tasksLoading, error: tasksError } = useTasks();
+  const { income, expense, savings, loading: financeLoading, error: financeError } = useFinance();
+  const { goals, loading: planningLoading, error: planningError } = usePlanning();
+  const {
+    data: dashboardSummary,
+    isLoading: summaryLoading,
+    error: summaryError,
+  } = useQuery({
+    queryKey: ['dashboard-summary'],
+    queryFn: getDashboardSummary,
+    refetchInterval: 10_000,
+  });
 
   const today = new Date().toISOString().slice(0, 10);
-  const activeTasks = tasks.filter((task) => task.status !== 'done').length;
+  const activeTasks = dashboardSummary?.pending_tasks ?? tasks.filter((task) => task.status !== 'done').length;
   const blockers = projects.filter((project) => project.status === 'Blocked').length;
   const urgent = tasks.filter((task) => task.priority === 'high' && task.status !== 'done').length;
   const overdue = tasks.filter((task) => task.dueDate < today && task.status !== 'done').length;
+  const totalProjects = dashboardSummary?.total_projects ?? projects.length;
+  const planningCount = dashboardSummary?.planning_count ?? goals.length;
+  const totalBalance = dashboardSummary?.total_balance ?? (income - expense - savings);
 
   const commandStats = {
     tasks: activeTasks,
     blockers,
     urgent,
-    pending: goals.filter((goal) => goal.progress < 100).length,
-    financialFlow: income >= expense ? 'strong' : 'watch',
+    pending: activeTasks,
+    financialFlow: totalBalance >= 0 ? 'strong' : 'watch',
   };
 
   const recommendations = useMemo<Recommendation[]>(
@@ -60,9 +74,9 @@ export function Dashboard() {
       },
       {
         id: 'r2',
-        title: 'Spending trend check',
-        detail: 'Review recent expense categories and rebalance if needed.',
-        severity: expense > income * 0.65 ? 'medium' : 'low',
+        title: totalBalance < 0 ? 'Cashflow is negative' : 'Cashflow is healthy',
+        detail: 'Review finance entries and rebalance income, expenses, and savings as needed.',
+        severity: totalBalance < 0 ? 'high' : 'low',
         actionLabel: 'Review Finance',
         onAction: () => navigate('/finance'),
       },
@@ -76,14 +90,14 @@ export function Dashboard() {
       },
       {
         id: 'r4',
-        title: 'Planning check-in',
-        detail: 'Review goal progress and update target milestones for this week.',
-        severity: 'low',
+        title: planningCount > 0 ? 'Planning check-in' : 'No planning items yet',
+        detail: planningCount > 0 ? 'Review goal progress and update target milestones for this week.' : 'Create planning items to track future milestones.',
+        severity: planningCount > 0 ? 'low' : 'medium',
         actionLabel: 'Open Planning',
         onAction: () => navigate('/planning'),
       },
     ],
-    [navigate, overdue, expense, income, blockers],
+    [navigate, overdue, totalBalance, blockers, planningCount],
   );
 
   const filteredRecommendations = focusMode ? recommendations.filter((item) => item.severity !== 'low') : recommendations;
@@ -96,9 +110,14 @@ export function Dashboard() {
 
   const primaryProject = orderedProjects[0];
   const secondaryProjects = orderedProjects.slice(1, 3);
+  const dashboardError = [projectsError, tasksError, financeError, planningError, summaryError instanceof Error ? summaryError.message : null].find(Boolean);
+  const isLoadingDashboard = projectsLoading || tasksLoading || financeLoading || planningLoading || summaryLoading;
 
   return (
     <div className="space-y-4 md:space-y-6">
+      {isLoadingDashboard ? <p className="text-sm text-slate-400">Loading dashboard data...</p> : null}
+      {dashboardError ? <p className="text-sm text-rose-300">Dashboard data partially unavailable: {dashboardError}</p> : null}
+
       <CommandCenter
         userName="Will"
         stats={commandStats}
@@ -135,7 +154,7 @@ export function Dashboard() {
                 description: 'Morning workflow bundle and task sync pipeline.',
                 progress: activeTasks > 0 ? Math.max(30, 100 - activeTasks * 5) : 90,
                 status: blockers > 0 ? 'idle' : 'running',
-                metric: `${activeTasks} active tasks`,
+                metric: `${activeTasks} active tasks / ${totalProjects} projects`,
                 onOpen: () => navigate('/projects'),
               },
               {
@@ -144,7 +163,7 @@ export function Dashboard() {
                 description: 'Budgeting, transaction reconciliation, and allocation checks.',
                 progress: income > 0 ? Math.max(20, Math.min(95, Math.round((1 - expense / income) * 100))) : 50,
                 status: 'idle',
-                metric: `${goals.length} tracked goals`,
+                metric: `${planningCount} tracked goals`,
                 onOpen: () => navigate('/finance'),
               },
             ]}
@@ -176,9 +195,9 @@ export function Dashboard() {
               {
                 id: 'm1',
                 label: 'Cashflow',
-                value: `$${(income - expense).toLocaleString()}`,
-                delta: income >= expense ? 'Positive this cycle' : 'Negative this cycle',
-                trend: income >= expense ? 'up' : 'down',
+                value: `$${totalBalance.toLocaleString()}`,
+                delta: totalBalance >= 0 ? 'Positive this cycle' : 'Negative this cycle',
+                trend: totalBalance >= 0 ? 'up' : 'down',
               },
               {
                 id: 'm2',

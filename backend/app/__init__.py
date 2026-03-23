@@ -27,9 +27,11 @@ def _seed_if_empty() -> None:
 
     if not Task.query.first():
         db.session.add(Task(title='Initial Task', completed=False, status='todo', priority='medium'))
+        db.session.add(Task(title='Review API Integrations', completed=False, status='in-progress', priority='high'))
 
     if not Project.query.first():
         db.session.add(Project(name='Life OS Build', status='In Progress', notes='Initial seeded project'))
+        db.session.add(Project(name='Container Reliability', status='Backlog', notes='Improve startup health checks'))
 
     if not FinanceEntry.query.first():
         db.session.add(
@@ -41,6 +43,15 @@ def _seed_if_empty() -> None:
                 date=date.today(),
             )
         )
+        db.session.add(
+            FinanceEntry(
+                entry_type='expense',
+                amount=600,
+                category='Infrastructure',
+                name='Cloud Services',
+                date=date.today(),
+            )
+        )
 
     if not PlanningItem.query.first():
         db.session.add(
@@ -48,6 +59,13 @@ def _seed_if_empty() -> None:
                 title='Buy a house scenario',
                 scenario='Home',
                 notes='Initial seeded planning row',
+            )
+        )
+        db.session.add(
+            PlanningItem(
+                title='Scale dashboard metrics',
+                scenario='Work',
+                notes='Add backend summary and operational analytics',
             )
         )
 
@@ -87,7 +105,15 @@ def create_app(config_class: type[Config] = Config) -> Flask:
         return error_response('Internal server error', 500)
 
     try:
-        CORS(app, resources={r'/api/*': {'origins': app.config['CORS_ORIGINS']}})
+        CORS(
+            app,
+            resources={
+                r'/api/*': {
+                    'origins': ['https://life.wnwest.com'],
+                    'methods': ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+                }
+            },
+        )
         db.init_app(app)
         app.register_blueprint(api_bp, url_prefix='/api')
 
@@ -98,8 +124,12 @@ def create_app(config_class: type[Config] = Config) -> Flask:
 
         with app.app_context():
             database_uri = app.config['SQLALCHEMY_DATABASE_URI']
+            if not database_uri or not database_uri.startswith('postgresql://'):
+                raise RuntimeError('[DB] DATABASE_URL must be a PostgreSQL URI (postgresql://...)')
+
             app.logger.info('[DB] Using database URI: %s', database_uri)
             db.session.execute(text('SELECT 1'))
+            app.logger.info('[DB] Connection check successful')
 
             environment = (app.config.get('FLASK_ENV') or 'development').lower()
             if environment != 'production':

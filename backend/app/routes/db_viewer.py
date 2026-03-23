@@ -20,7 +20,7 @@ def _serialize_value(value):
     return value
 
 
-@db_viewer_bp.get('/db/tables', strict_slashes=False)
+@db_viewer_bp.route('/db/tables', methods=['GET'], strict_slashes=False)
 def get_tables():
     current_app.logger.info('[DB] Fetching tables')
     tables = inspect(db.engine).get_table_names()
@@ -41,4 +41,3 @@ def get_table_rows(table_name: str):
     normalized_rows = [{key: _serialize_value(value) for key, value in row.items()} for row in rows]
 
     return success_response(normalized_rows)
-

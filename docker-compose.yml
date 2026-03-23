@@ -31,7 +31,7 @@ services:
       context: ./backend   # 👈 THIS is where your Dockerfile is
     container_name: lifeos-backend
     environment:
-      - DATABASE_URL=postgresql://lifeos:lifeos@db:5432/lifeos
+      - DATABASE_URL=postgresql://lifeos:lifeos@lifeos-db:5432/lifeos
     depends_on:
       - db
     ports:
