@@ -35,6 +35,8 @@ services:
     working_dir: /app/backend
     environment:
       - DATABASE_URL=postgresql://lifeos:lifeos@db:5432/lifeos
+      - AI_GATEWAY_URL=http://ai-gateway:5000
+      - AI_GATEWAY_CHAT_ENDPOINT=/api/chat
     depends_on:
       - db
     ports:

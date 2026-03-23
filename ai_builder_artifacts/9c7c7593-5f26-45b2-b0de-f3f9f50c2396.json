@@ -1,0 +1,11 @@
+{
+  "id": "9c7c7593-5f26-45b2-b0de-f3f9f50c2396",
+  "feature_name": "Text and Image QR Code Generator",
+  "risk_level": "Low",
+  "files_affected": [
+    "src/components/QRCodeGenerator.tsx",
+    "src/App.tsx",
+    "package.json"
+  ],
+  "generated_at": "2026-03-23T02:50:58.384611+00:00"
+}
