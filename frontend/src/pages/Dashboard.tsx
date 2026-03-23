@@ -9,6 +9,7 @@ import { ProjectGrid } from '../modules/dashboard/components/ProjectGrid';
 import { QuickActions } from '../modules/dashboard/components/QuickActions';
 import { Recommendation, RecommendationsPanel } from '../modules/dashboard/components/RecommendationsPanel';
 import { RightSidebar } from '../modules/dashboard/components/RightSidebar';
+import { AIProjectGenerator } from '../modules/dashboard/components/AIProjectGenerator';
 import { useFinance } from '../modules/finance/hooks/useFinance';
 import { usePlanning } from '../modules/planning/hooks/usePlanning';
 import { useProjects } from '../modules/projects/hooks/useProjects';
@@ -126,6 +127,8 @@ export function Dashboard() {
         onToggleFocusMode={() => setFocusMode((prev) => !prev)}
         onSyncAllData={() => navigate('/tools')}
       />
+
+      <AIProjectGenerator />
 
       <RecommendationsPanel items={filteredRecommendations} />
 

@@ -1,8 +1,9 @@
-export type ProjectStatus = 'Backlog' | 'In Progress' | 'Blocked' | 'Complete';
+export type ProjectStatus = 'New' | 'Backlog' | 'In Progress' | 'Blocked' | 'Complete';
 
 export interface Project {
   id: string;
   name: string;
+  description?: string;
   status: ProjectStatus;
   notes: string;
   link?: string;

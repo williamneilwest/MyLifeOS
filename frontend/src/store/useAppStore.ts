@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 export type ThemeMode = 'dark' | 'light';
-export type ModuleId = 'dashboard' | 'finance' | 'projects' | 'homelab' | 'tasks' | 'planning' | 'tools' | 'database';
+export type ModuleId = 'dashboard' | 'ai-builder' | 'finance' | 'projects' | 'homelab' | 'tasks' | 'planning' | 'tools' | 'database';
 
 export interface UserPreferences {
   theme: ThemeMode;
@@ -26,7 +26,7 @@ interface AppStore {
   setQuickStats: (stats: Partial<QuickStats>) => void;
 }
 
-export const defaultActiveModules: ModuleId[] = ['dashboard', 'finance', 'projects', 'homelab', 'tasks', 'planning', 'tools', 'database'];
+export const defaultActiveModules: ModuleId[] = ['dashboard', 'ai-builder', 'finance', 'projects', 'homelab', 'tasks', 'planning', 'tools', 'database'];
 
 export const useAppStore = create<AppStore>()(
   persist(

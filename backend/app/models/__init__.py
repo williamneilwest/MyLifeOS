@@ -1,3 +1,4 @@
+from .ai_build import AIBuild
 from .finance import FinanceEntry
 from .home_planning import HomePlanningProfile
 from .home_planning_scenario import HomePlanningScenario
@@ -8,6 +9,7 @@ from .task import Task
 from .tools import CommandSnippet, ToolLink
 
 __all__ = [
+    'AIBuild',
     'Task',
     'Project',
     'FinanceEntry',

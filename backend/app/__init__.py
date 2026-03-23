@@ -30,8 +30,8 @@ def _seed_if_empty() -> None:
         db.session.add(Task(title='Review API Integrations', completed=False, status='in-progress', priority='high'))
 
     if not Project.query.first():
-        db.session.add(Project(name='Life OS Build', status='In Progress', notes='Initial seeded project'))
-        db.session.add(Project(name='Container Reliability', status='Backlog', notes='Improve startup health checks'))
+        db.session.add(Project(name='Life OS Build', description='Initial seeded project', status='In Progress', notes='Initial seeded project'))
+        db.session.add(Project(name='Container Reliability', description='Improve startup health checks', status='Backlog', notes='Improve startup health checks'))
 
     if not FinanceEntry.query.first():
         db.session.add(
@@ -89,6 +89,19 @@ def _seed_if_empty() -> None:
     db.session.commit()
 
 
+def _ensure_projects_description_column() -> None:
+    inspector = inspect(db.engine)
+    if 'projects' not in inspector.get_table_names():
+        return
+
+    column_names = {column['name'] for column in inspector.get_columns('projects')}
+    if 'description' in column_names:
+        return
+
+    db.session.execute(text("ALTER TABLE projects ADD COLUMN description TEXT NOT NULL DEFAULT ''"))
+    db.session.commit()
+
+
 def create_app(config_class: type[Config] = Config) -> Flask:
     app = Flask(__name__)
     app.config.from_object(config_class)
@@ -114,8 +127,12 @@ def create_app(config_class: type[Config] = Config) -> Flask:
                 }
             },
         )
+        app.register_blueprint(api_bp)
+        print('\n=== REGISTERED ROUTES ===')
+        for rule in app.url_map.iter_rules():
+            print(rule)
+        print('========================\n')
         db.init_app(app)
-        app.register_blueprint(api_bp, url_prefix='/api')
 
         # Ensure models are loaded into SQLAlchemy metadata before table creation.
         from . import models  # noqa: F401
@@ -135,6 +152,8 @@ def create_app(config_class: type[Config] = Config) -> Flask:
             if environment != 'production':
                 app.logger.info('[DB] Running db.create_all() in %s mode', environment)
                 db.create_all()
+
+            _ensure_projects_description_column()
 
             expected_tables = set(db.metadata.tables.keys())
             actual_tables = set(inspect(db.engine).get_table_names())

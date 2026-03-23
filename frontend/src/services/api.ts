@@ -60,6 +60,32 @@ export interface DashboardSummary {
   planning_count: number;
 }
 
+export interface AiProjectResult {
+  project: Project;
+  tasks: Task[];
+  ai: {
+    difficulty: 'Easy' | 'Medium' | 'Hard';
+    estimated_time: string;
+  };
+}
+
+export function createProjectFromIdea(idea: string, generateTasks: boolean) {
+  return fetch('/api/ai/create-project', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idea, generateTasks }),
+  }).then(async (res) => {
+    const json = await res.json().catch(() => null) as { data?: AiProjectResult; error?: string } | null;
+    if (!res.ok) {
+      throw new Error(json?.error || `AI project generation failed (${res.status})`);
+    }
+    if (!json?.data) {
+      throw new Error('AI project generation returned an invalid response');
+    }
+    return json.data;
+  });
+}
+
 export function getDashboardSummary() {
   return apiClient.get<DashboardSummary>('/dashboard-summary');
 }
