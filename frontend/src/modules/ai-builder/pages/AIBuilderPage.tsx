@@ -11,6 +11,7 @@ export function AIBuilderPage() {
   const [idea, setIdea] = useState('');
   const [selectedBuildId, setSelectedBuildId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [applyOutput, setApplyOutput] = useState<string | null>(null);
 
   const { data: buildsPayload, isLoading: loadingBuilds, error: buildsError } = useQuery({
     queryKey: ['ai-builder-builds'],
@@ -25,9 +26,15 @@ export function AIBuilderPage() {
   const generateMutation = useMutation({
     mutationFn: () => aiBuilderService.generate(idea.trim()),
     onSuccess: async (payload) => {
-      setNotice('Build plan generated.');
+      const build = payload?.build || {
+        codexPrompt: '',
+        risk: 'unknown',
+        filesAffected: [],
+        rollbackPlan: '',
+      };
+      setNotice(payload?.success ? 'Build plan generated.' : 'AI generation failed. Using fallback build payload.');
       setIdea('');
-      setSelectedBuildId(payload.build.id);
+      setSelectedBuildId(build.id || null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['ai-builder-builds'] }),
         queryClient.invalidateQueries({ queryKey: ['ai-builder-status'] }),
@@ -36,10 +43,18 @@ export function AIBuilderPage() {
   });
 
   const applyMutation = useMutation({
-    mutationFn: (buildId: string) => aiBuilderService.apply(buildId),
+    mutationFn: (build: AIBuild) =>
+      aiBuilderService.applyRuntime({
+        codexPrompt: build.codex_prompt,
+        filesAffected: build.files_affected,
+        rollbackPlan: build.rollback_plan,
+      }),
     onSuccess: async (payload) => {
-      setNotice(`Build applied: ${payload.build.feature_name}`);
-      setSelectedBuildId(payload.build.id);
+      setNotice(payload.message || 'Build applied.');
+      const output = payload.commandResults
+        .map((item) => [`$ ${item.command}`, item.stdout, item.stderr].filter(Boolean).join('\n'))
+        .join('\n\n');
+      setApplyOutput(output || 'No command output.');
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['ai-builder-builds'] }),
         queryClient.invalidateQueries({ queryKey: ['ai-builder-status'] }),
@@ -50,8 +65,14 @@ export function AIBuilderPage() {
   const revertMutation = useMutation({
     mutationFn: (buildId: string) => aiBuilderService.revert(buildId),
     onSuccess: async (payload) => {
-      setNotice(`Build reverted: ${payload.build.feature_name}`);
-      setSelectedBuildId(payload.build.id);
+      const build = payload?.build || {
+        codexPrompt: '',
+        risk: 'unknown',
+        filesAffected: [],
+        rollbackPlan: '',
+      };
+      setNotice(`Build reverted: ${(build as { feature_name?: string }).feature_name || 'Unknown build'}`);
+      setSelectedBuildId((build as { id?: string }).id || selectedBuildId);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['ai-builder-builds'] }),
         queryClient.invalidateQueries({ queryKey: ['ai-builder-status'] }),
@@ -105,7 +126,7 @@ export function AIBuilderPage() {
             loading={busy}
             onApply={() => {
               if (!selectedBuild) return;
-              applyMutation.mutate(selectedBuild.id);
+              applyMutation.mutate(selectedBuild);
             }}
             onRevert={() => {
               if (!selectedBuild) return;
@@ -115,6 +136,14 @@ export function AIBuilderPage() {
               void copyPrompt(selectedBuild || null);
             }}
           />
+          {applyOutput ? (
+            <div className="rounded-xl border border-white/10 bg-zinc-900/70 p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-400">Apply Output</p>
+              <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-zinc-950/70 p-3 text-xs text-slate-200">
+                {applyOutput}
+              </pre>
+            </div>
+          ) : null}
         </div>
 
         <div className="space-y-6">

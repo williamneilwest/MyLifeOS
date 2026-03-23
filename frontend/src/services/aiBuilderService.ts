@@ -26,7 +26,14 @@ export interface AIBuild {
 }
 
 interface GenerateResponse {
-  build: AIBuild;
+  build?: {
+    id?: string;
+    codexPrompt?: string;
+    risk?: string;
+    filesAffected?: string[];
+    rollbackPlan?: string;
+  };
+  success?: boolean;
 }
 
 interface BuildListResponse {
@@ -35,6 +42,30 @@ interface BuildListResponse {
 
 interface BuildResponse {
   build: AIBuild;
+}
+
+interface ApplyResponse {
+  success: boolean;
+  commit_hash?: string;
+  build?: AIBuild;
+}
+
+export interface RuntimeBuildInput {
+  codexPrompt: string;
+  filesAffected: string[];
+  rollbackPlan: string;
+}
+
+export interface RuntimeApplyResponse {
+  success: boolean;
+  filesApplied: string[];
+  commandResults: Array<{
+    command: string;
+    stdout: string;
+    stderr: string;
+    returnCode: number;
+  }>;
+  message: string;
 }
 
 interface BuilderStatusResponse {
@@ -47,11 +78,22 @@ interface BuilderStatusResponse {
 }
 
 export const aiBuilderService = {
-  generate: (idea: string) =>
-    apiClient.post<GenerateResponse>('/ai-builder/generate', { idea }),
+  generate: async (idea: string): Promise<GenerateResponse> => {
+    const response = await fetch('/api/ai-builder/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ idea }),
+    });
+
+    const json = (await response.json()) as GenerateResponse;
+    return json;
+  },
   list: () => apiClient.get<BuildListResponse>('/ai-builder/builds'),
   getById: (id: string) => apiClient.get<BuildResponse>(`/ai-builder/builds/${id}`),
-  apply: (id: string) => apiClient.post<BuildResponse>(`/ai-builder/builds/${id}/apply`, {}),
+  apply: (id: string) => apiClient.post<ApplyResponse>(`/ai-builder/builds/${id}/apply`, {}),
+  applyRuntime: (build: RuntimeBuildInput) => apiClient.post<RuntimeApplyResponse>('/ai-builder/apply', { build }),
   revert: (id: string) => apiClient.post<BuildResponse>(`/ai-builder/builds/${id}/revert`, {}),
   status: () => apiClient.get<BuilderStatusResponse>('/ai-builder/status'),
 };
