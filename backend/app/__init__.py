@@ -102,11 +102,73 @@ def _ensure_projects_description_column() -> None:
     db.session.commit()
 
 
+def _ensure_quick_links_table() -> None:
+    from .models import QuickLink
+
+    inspector = inspect(db.engine)
+    if 'quick_links' in inspector.get_table_names():
+        columns = {column['name'] for column in inspector.get_columns('quick_links')}
+        if 'user_id' not in columns:
+            db.session.execute(text("ALTER TABLE quick_links ADD COLUMN user_id VARCHAR(64)"))
+            db.session.execute(text("UPDATE quick_links SET user_id = 'legacy-user' WHERE user_id IS NULL"))
+            db.session.execute(text("ALTER TABLE quick_links ALTER COLUMN user_id SET NOT NULL"))
+            db.session.commit()
+        return
+
+    QuickLink.__table__.create(bind=db.engine, checkfirst=True)
+
+
+def _ensure_scripts_table() -> None:
+    from .models import Script
+
+    inspector = inspect(db.engine)
+    if 'scripts' in inspector.get_table_names():
+        columns = {column['name'] for column in inspector.get_columns('scripts')}
+        if 'user_id' not in columns:
+            db.session.execute(text("ALTER TABLE scripts ADD COLUMN user_id VARCHAR(64)"))
+            db.session.execute(text("UPDATE scripts SET user_id = 'legacy-user' WHERE user_id IS NULL"))
+            db.session.execute(text("ALTER TABLE scripts ALTER COLUMN user_id SET NOT NULL"))
+            db.session.commit()
+        return
+
+    Script.__table__.create(bind=db.engine, checkfirst=True)
+
+
+def _ensure_users_table() -> None:
+    from .models import User
+
+    User.__table__.create(bind=db.engine, checkfirst=True)
+
+
+def _ensure_flow_runs_user_id() -> None:
+    inspector = inspect(db.engine)
+    if 'flow_runs' not in inspector.get_table_names():
+        return
+    columns = {column['name'] for column in inspector.get_columns('flow_runs')}
+    if 'user_id' in columns:
+        return
+    db.session.execute(text("ALTER TABLE flow_runs ADD COLUMN user_id VARCHAR(64)"))
+    db.session.execute(text("UPDATE flow_runs SET user_id = 'legacy-user' WHERE user_id IS NULL"))
+    db.session.execute(text("ALTER TABLE flow_runs ALTER COLUMN user_id SET NOT NULL"))
+    db.session.commit()
+
+
+def _ensure_user_tools_table() -> None:
+    from .models import UserTool
+
+    UserTool.__table__.create(bind=db.engine, checkfirst=True)
+
+
 def create_app(config_class: type[Config] = Config) -> Flask:
     app = Flask(__name__)
     app.config.from_object(config_class)
     app.logger.setLevel(logging.INFO)
     app.logger.info('[BOOT] Initializing application')
+
+    @app.after_request
+    def add_no_cache_headers(response):
+        response.headers['Cache-Control'] = 'no-store'
+        return response
 
     @app.errorhandler(HTTPException)
     def handle_http_exception(error: HTTPException):
@@ -152,6 +214,14 @@ def create_app(config_class: type[Config] = Config) -> Flask:
             if environment != 'production':
                 app.logger.info('[DB] Running db.create_all() in %s mode', environment)
                 db.create_all()
+            else:
+                app.logger.info('[DB] Production mode: ensuring required dynamic tables exist')
+
+            _ensure_users_table()
+            _ensure_quick_links_table()
+            _ensure_scripts_table()
+            _ensure_flow_runs_user_id()
+            _ensure_user_tools_table()
 
             _ensure_projects_description_column()
 

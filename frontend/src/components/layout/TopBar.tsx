@@ -2,7 +2,7 @@ import { Bell, ChevronDown, Menu, MoonStar, Plus, Search, SunMedium, UserCircle2
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { quickActions, userProfile } from '../../config/appConfig';
-import { moduleNavItems } from '../../routes/moduleRegistry';
+import { getModuleNavItems } from '../../routes/moduleRegistry';
 import { useAppStore } from '../../store/useAppStore';
 import { Badge, Button, Input } from '../ui';
 
@@ -11,6 +11,8 @@ export function TopBar() {
   const toggleSidebar = useAppStore((state) => state.toggleSidebar);
   const toggleTheme = useAppStore((state) => state.toggleTheme);
   const theme = useAppStore((state) => state.preferences.theme);
+  const activeModules = useAppStore((state) => state.activeModules);
+  const navItems = getModuleNavItems(activeModules);
   const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -36,7 +38,7 @@ export function TopBar() {
       return [];
     }
 
-    const modules = moduleNavItems
+    const modules = navItems
       .filter((item) => item.label.toLowerCase().includes(clean))
       .map((item) => ({ id: item.id, label: item.label, type: 'module' as const, route: item.path }));
 

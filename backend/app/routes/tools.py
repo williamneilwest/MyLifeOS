@@ -1,8 +1,11 @@
+import json
+
 from flask import Blueprint, current_app, request
 
+from ..auth import auth_required, get_current_user
 from ..api_response import error_response, success_response
 from ..db import db
-from ..models import CommandSnippet, ToolLink
+from ..models import CommandSnippet, ToolLink, UserTool
 
 
 tools_bp = Blueprint('tools', __name__)
@@ -40,3 +43,83 @@ def create_tool_link():
     db.session.commit()
 
     return success_response(link.to_dict(), 201)
+
+
+def _ensure_default_user_tools(user_id: str) -> None:
+    if UserTool.query.filter_by(user_id=user_id).first():
+        return
+    defaults = [
+        UserTool(
+            user_id=user_id,
+            name='Services',
+            type='services',
+            config_json=json.dumps({'showHomelab': True}),
+        ),
+        UserTool(
+            user_id=user_id,
+            name='QR Generator',
+            type='qr',
+            config_json=json.dumps({'defaultText': ''}),
+        ),
+    ]
+    db.session.add_all(defaults)
+    db.session.commit()
+
+
+@tools_bp.get('/tools/modules', strict_slashes=False)
+@auth_required
+def list_user_tools():
+    user = get_current_user()
+    _ensure_default_user_tools(user.id)
+    modules = UserTool.query.filter_by(user_id=user.id).order_by(UserTool.updated_at.desc()).all()
+    return success_response({'modules': [module.to_dict() for module in modules]})
+
+
+@tools_bp.post('/tools/modules', strict_slashes=False)
+@auth_required
+def create_user_tool():
+    user = get_current_user()
+    payload = request.get_json(silent=True) or {}
+    name = str(payload.get('name') or '').strip()
+    tool_type = str(payload.get('type') or '').strip()
+    config = payload.get('config') if isinstance(payload.get('config'), dict) else {}
+    if not name:
+        return error_response('name is required', 400)
+    if not tool_type:
+        return error_response('type is required', 400)
+    module = UserTool(user_id=user.id, name=name, type=tool_type, config_json=json.dumps(config))
+    db.session.add(module)
+    db.session.commit()
+    return success_response(module.to_dict(), 201)
+
+
+@tools_bp.put('/tools/modules/<string:module_id>', strict_slashes=False)
+@auth_required
+def update_user_tool(module_id: str):
+    user = get_current_user()
+    module = UserTool.query.filter_by(id=module_id, user_id=user.id).first_or_404()
+    payload = request.get_json(silent=True) or {}
+    if 'name' in payload:
+        name = str(payload.get('name') or '').strip()
+        if not name:
+            return error_response('name cannot be empty', 400)
+        module.name = name
+    if 'type' in payload:
+        tool_type = str(payload.get('type') or '').strip()
+        if not tool_type:
+            return error_response('type cannot be empty', 400)
+        module.type = tool_type
+    if 'config' in payload:
+        module.config_json = json.dumps(payload.get('config') if isinstance(payload.get('config'), dict) else {})
+    db.session.commit()
+    return success_response(module.to_dict())
+
+
+@tools_bp.delete('/tools/modules/<string:module_id>', strict_slashes=False)
+@auth_required
+def delete_user_tool(module_id: str):
+    user = get_current_user()
+    module = UserTool.query.filter_by(id=module_id, user_id=user.id).first_or_404()
+    db.session.delete(module)
+    db.session.commit()
+    return success_response({'deleted': True, 'id': module_id})

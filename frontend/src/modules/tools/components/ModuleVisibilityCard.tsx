@@ -1,10 +1,11 @@
 import { Card } from '../../../components/ui';
-import { moduleNavItems } from '../../../routes/moduleRegistry';
+import { getModuleNavItems } from '../../../routes/moduleRegistry';
 import { useAppStore, type ModuleId } from '../../../store/useAppStore';
 
 export function ModuleVisibilityCard() {
   const activeModules = useAppStore((state) => state.activeModules);
   const setActiveModules = useAppStore((state) => state.setActiveModules);
+  const navItems = getModuleNavItems(['workplace', 'dashboard', 'tools']);
 
   function onToggle(moduleId: ModuleId) {
     if (activeModules.includes(moduleId)) {
@@ -23,7 +24,7 @@ export function ModuleVisibilityCard() {
       <h3 className="text-lg font-semibold text-white">Sidebar Modules</h3>
       <p className="mt-1 text-sm text-slate-400">Toggle module visibility for your navigation.</p>
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
-        {moduleNavItems.map((item) => {
+        {navItems.map((item) => {
           const active = activeModules.includes(item.id);
 
           return (

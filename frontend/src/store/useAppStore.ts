@@ -2,11 +2,12 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 export type ThemeMode = 'dark' | 'light';
-export type ModuleId = 'dashboard' | 'ai-builder' | 'finance' | 'projects' | 'homelab' | 'tasks' | 'planning' | 'tools' | 'database';
+export type ModuleId = 'dashboard' | 'services' | 'workplace' | 'scripts' | 'ai-builder' | 'finance' | 'projects' | 'homelab' | 'tasks' | 'planning' | 'tools' | 'database';
 
 export interface UserPreferences {
   theme: ThemeMode;
   sidebarCollapsed: boolean;
+  hideMobileTabs: boolean;
 }
 
 export interface QuickStats {
@@ -22,11 +23,12 @@ interface AppStore {
   activeModules: ModuleId[];
   toggleTheme: () => void;
   toggleSidebar: () => void;
+  toggleHideMobileTabs: () => void;
   setActiveModules: (modules: ModuleId[]) => void;
   setQuickStats: (stats: Partial<QuickStats>) => void;
 }
 
-export const defaultActiveModules: ModuleId[] = ['dashboard', 'ai-builder', 'finance', 'projects', 'homelab', 'tasks', 'planning', 'tools', 'database'];
+export const defaultActiveModules: ModuleId[] = ['workplace', 'dashboard', 'tools'];
 
 export const useAppStore = create<AppStore>()(
   persist(
@@ -34,6 +36,7 @@ export const useAppStore = create<AppStore>()(
       preferences: {
         theme: 'dark',
         sidebarCollapsed: false,
+        hideMobileTabs: false,
       },
       quickStats: {
         netWorth: 248500,
@@ -54,6 +57,13 @@ export const useAppStore = create<AppStore>()(
           preferences: {
             ...state.preferences,
             sidebarCollapsed: !state.preferences.sidebarCollapsed,
+          },
+        })),
+      toggleHideMobileTabs: () =>
+        set((state) => ({
+          preferences: {
+            ...state.preferences,
+            hideMobileTabs: !state.preferences.hideMobileTabs,
           },
         })),
       setActiveModules: (modules) => set({ activeModules: modules }),

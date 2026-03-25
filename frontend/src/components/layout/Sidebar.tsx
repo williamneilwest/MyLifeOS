@@ -1,6 +1,6 @@
 import { ChevronsLeft, ChevronsRight, LayoutGrid } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
-import { moduleNavItems } from '../../routes/moduleRegistry';
+import { getModuleNavItems } from '../../routes/moduleRegistry';
 import { useAppStore } from '../../store/useAppStore';
 import { cn } from '../../utils/cn';
 
@@ -11,7 +11,9 @@ interface SidebarProps {
 
 export function Sidebar({ open: _open, onClose: _onClose }: SidebarProps) {
   const collapsed = useAppStore((state) => state.preferences.sidebarCollapsed);
+  const activeModules = useAppStore((state) => state.activeModules);
   const toggleSidebar = useAppStore((state) => state.toggleSidebar);
+  const navItems = getModuleNavItems(activeModules);
 
   return (
     <aside
@@ -49,7 +51,7 @@ export function Sidebar({ open: _open, onClose: _onClose }: SidebarProps) {
       </div>
 
       <nav className="flex flex-1 flex-col gap-1.5 p-3">
-        {moduleNavItems.map((item) => {
+        {navItems.map((item) => {
           const Icon = item.icon;
           return (
             <NavLink

@@ -3,4 +3,5 @@ Flask-SQLAlchemy
 Flask-CORS
 gunicorn
 psycopg2-binary
-openai
+pandas
+openpyxl
