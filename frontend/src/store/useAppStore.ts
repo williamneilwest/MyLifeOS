@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { ToolModule } from '../modules/tools/types';
 
 export type ThemeMode = 'dark' | 'light';
 export type ModuleId = 'dashboard' | 'services' | 'workplace' | 'scripts' | 'ai-builder' | 'finance' | 'projects' | 'homelab' | 'tasks' | 'planning' | 'tools' | 'database';
@@ -21,11 +22,16 @@ interface AppStore {
   preferences: UserPreferences;
   quickStats: QuickStats;
   activeModules: ModuleId[];
+  tools: ToolModule[];
   toggleTheme: () => void;
   toggleSidebar: () => void;
   toggleHideMobileTabs: () => void;
   setActiveModules: (modules: ModuleId[]) => void;
   setQuickStats: (stats: Partial<QuickStats>) => void;
+  setTools: (tools: ToolModule[]) => void;
+  addTool: (tool: ToolModule) => void;
+  updateTool: (tool: ToolModule) => void;
+  removeTool: (toolId: string) => void;
 }
 
 export const defaultActiveModules: ModuleId[] = ['workplace', 'dashboard', 'tools'];
@@ -45,6 +51,7 @@ export const useAppStore = create<AppStore>()(
         homelabUptime: 99.7,
       },
       activeModules: defaultActiveModules,
+      tools: [],
       toggleTheme: () =>
         set((state) => ({
           preferences: {
@@ -74,12 +81,40 @@ export const useAppStore = create<AppStore>()(
             ...stats,
           },
         })),
+      setTools: (tools) => set({ tools }),
+      addTool: (tool) =>
+        set((state) => ({
+          tools: [...state.tools, tool],
+        })),
+      updateTool: (tool) =>
+        set((state) => ({
+          tools: state.tools.map((candidate) => (candidate.id === tool.id ? tool : candidate)),
+        })),
+      removeTool: (toolId) =>
+        set((state) => ({
+          tools: state.tools.filter((candidate) => candidate.id !== toolId),
+        })),
     }),
     {
       name: 'life-os-app-store',
+      version: 1,
+      migrate: (persistedState) => {
+        const state = persistedState as Partial<AppStore> | undefined;
+        return {
+          ...state,
+          tools: Array.isArray(state?.tools) ? state.tools : [],
+          preferences: state?.preferences || {
+            theme: 'dark',
+            sidebarCollapsed: false,
+            hideMobileTabs: false,
+          },
+          activeModules: Array.isArray(state?.activeModules) ? state.activeModules : defaultActiveModules,
+        } as AppStore;
+      },
       partialize: (state) => ({
         preferences: state.preferences,
         activeModules: state.activeModules,
+        tools: state.tools,
       }),
     },
   ),

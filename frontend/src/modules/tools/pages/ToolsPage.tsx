@@ -1,60 +1,108 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, Pencil, Plus, QrCode, Trash2, Wrench } from 'lucide-react';
+import { ExternalLink, Pencil, Plus, QrCode, Server, Trash2, Wrench } from 'lucide-react';
+import ApiModuleView from '../../api/ApiModule';
 import { Badge, Button, Card, Modal, SectionHeader } from '../../../components/ui';
 import { toolsService } from '../../../services/toolsService';
-import type { ToolModule, ToolModuleType } from '../types';
+import { useAppStore } from '../../../store/useAppStore';
+import type { ApiModuleConfig, QrHistoryEntry, QrModuleConfig, ShortcutModuleConfig, ToolModule, ToolModuleType } from '../types';
 
-interface QrHistoryEntry {
-  id: string;
-  text: string;
-  createdAt: string;
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
-function parseQrHistory(config: Record<string, unknown>): QrHistoryEntry[] {
-  const raw = config.history;
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map((entry) => {
-      if (!entry || typeof entry !== 'object') return null;
-      const candidate = entry as Record<string, unknown>;
-      const text = typeof candidate.text === 'string' ? candidate.text : '';
-      if (!text.trim()) return null;
+function normalizeQrConfig(config: Record<string, unknown>): QrModuleConfig {
+  const parsed = asObject(config);
+  const historyRaw = Array.isArray(parsed.history) ? parsed.history : [];
+  const history: QrHistoryEntry[] = historyRaw
+    .map((item) => {
+      const row = asObject(item);
+      const text = String(row.text || '').trim();
+      if (!text) return null;
       return {
-        id: typeof candidate.id === 'string' ? candidate.id : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        id: String(row.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`),
         text,
-        createdAt: typeof candidate.createdAt === 'string' ? candidate.createdAt : new Date().toISOString(),
+        createdAt: String(row.createdAt || new Date().toISOString()),
       };
     })
-    .filter((entry): entry is QrHistoryEntry => Boolean(entry));
+    .filter((item): item is QrHistoryEntry => Boolean(item));
+
+  return {
+    defaultText: String(parsed.defaultText || ''),
+    history,
+  };
 }
 
-function QrModule({ module }: { module: ToolModule }) {
-  const queryClient = useQueryClient();
-  const [text, setText] = useState(String(module.config.defaultText || ''));
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const history = useMemo(() => parseQrHistory(module.config), [module.config]);
+function normalizeShortcutConfig(config: Record<string, unknown>, moduleName = ''): ShortcutModuleConfig {
+  const parsed = asObject(config);
+  return {
+    label: String(parsed.label || moduleName || 'Shortcut'),
+    url: String(parsed.url || '/'),
+    newTab: parsed.newTab !== false,
+    method: String(parsed.method || 'GET').toUpperCase() === 'POST' ? 'POST' : 'GET',
+  };
+}
+
+function normalizeApiConfig(config: Record<string, unknown>): ApiModuleConfig {
+  const parsed = asObject(config);
+  const refreshRaw = Number(parsed.refreshInterval || 0);
+  const displayRaw = String(parsed.display || 'raw').toLowerCase();
+  return {
+    endpoint: String(parsed.endpoint || ''),
+    method: String(parsed.method || 'GET').toUpperCase() === 'POST' ? 'POST' : 'GET',
+    refreshInterval: Number.isFinite(refreshRaw) && refreshRaw > 0 ? refreshRaw : undefined,
+    display: displayRaw === 'table' || displayRaw === 'card' || displayRaw === 'raw' ? (displayRaw as 'table' | 'card' | 'raw') : 'raw',
+  };
+}
+
+function QrToolModule({ module, onSaveConfig }: { module: ToolModule; onSaveConfig: (module: ToolModule, config: Record<string, unknown>) => Promise<void> }) {
+  const config = normalizeQrConfig(module.config);
+  const [text, setText] = useState(config.defaultText || '');
+  const [savingError, setSavingError] = useState<string | null>(null);
+  const lastSavedText = useRef((config.defaultText || '').trim());
+
+  useEffect(() => {
+    setText(config.defaultText || '');
+    lastSavedText.current = (config.defaultText || '').trim();
+  }, [module.id, config.defaultText]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const cleanText = text.trim();
+      if (!cleanText || cleanText === lastSavedText.current) return;
+
+      const nextHistory = [
+        {
+          id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          text: cleanText,
+          createdAt: new Date().toISOString(),
+        },
+        ...(config.history || []).filter((entry) => entry.text !== cleanText),
+      ].slice(0, 40);
+
+      void onSaveConfig(module, {
+        ...module.config,
+        defaultText: cleanText,
+        history: nextHistory,
+      })
+        .then(() => {
+          lastSavedText.current = cleanText;
+          setSavingError(null);
+        })
+        .catch((error) => {
+          setSavingError(error instanceof Error ? error.message : 'Failed to auto-save QR history');
+        });
+    }, 900);
+
+    return () => window.clearTimeout(timer);
+  }, [config.history, module, onSaveConfig, text]);
+
   const qrUrl = useMemo(
     () => `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(text || ' ')}`,
     [text],
   );
-  const displayedHistory = useMemo(() => history.slice(0, 8), [history]);
 
-  const saveMutation = useMutation({
-    mutationFn: (config: Record<string, unknown>) =>
-      toolsService.updateModule(module.id, {
-        name: module.name,
-        type: module.type,
-        config,
-      }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['tool-modules'] });
-      setSaveError(null);
-    },
-    onError: (error) => {
-      setSaveError(error instanceof Error ? error.message : 'Failed to save QR code');
-    },
-  });
+  const history = useMemo(() => (config.history || []).slice(0, 10), [config.history]);
 
   return (
     <Card title={module.name} description="Generate QR codes instantly.">
@@ -70,34 +118,6 @@ function QrModule({ module }: { module: ToolModule }) {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => navigator.clipboard.writeText(text)}>Copy Text</Button>
-          <Button
-            variant="outline"
-            disabled={saveMutation.isPending || !text.trim()}
-            onClick={() => {
-              const cleanText = text.trim();
-              if (!cleanText) {
-                setSaveError('Text is required to save a QR code.');
-                return;
-              }
-              const withoutDuplicate = history.filter((item) => item.text !== cleanText);
-              const nextHistory: QrHistoryEntry[] = [
-                {
-                  id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-                  text: cleanText,
-                  createdAt: new Date().toISOString(),
-                },
-                ...withoutDuplicate,
-              ].slice(0, 40);
-
-              saveMutation.mutate({
-                ...module.config,
-                defaultText: cleanText,
-                history: nextHistory,
-              });
-            }}
-          >
-            {saveMutation.isPending ? 'Saving...' : 'Save to History'}
-          </Button>
           <a
             href={qrUrl}
             download="qr-code.png"
@@ -106,36 +126,22 @@ function QrModule({ module }: { module: ToolModule }) {
             Download QR
           </a>
         </div>
-        {saveError ? <p className="text-xs text-rose-300">{saveError}</p> : null}
+
+        {savingError ? <p className="text-xs text-rose-300">{savingError}</p> : null}
 
         <details className="rounded-xl border border-white/10 bg-zinc-950/50 p-3">
-          <summary className="cursor-pointer list-none text-sm font-medium text-slate-200">
-            QR History ({history.length})
-          </summary>
+          <summary className="cursor-pointer list-none text-sm font-medium text-slate-200">QR History ({config.history?.length || 0})</summary>
           <div className="mt-3 space-y-2">
             {!history.length ? <p className="text-xs text-slate-400">No saved QR codes yet.</p> : null}
-            {displayedHistory.map((entry) => {
-              const entryQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(entry.text)}`;
-              return (
-                <div key={entry.id} className="rounded-lg border border-white/10 bg-zinc-900/60 p-2">
-                  <p className="truncate text-sm text-slate-200">{entry.text}</p>
-                  <p className="mt-1 text-[11px] text-slate-500">{new Date(entry.createdAt).toLocaleString()}</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Button variant="ghost" onClick={() => setText(entry.text)}>Load</Button>
-                    <a
-                      href={entryQrUrl}
-                      download="qr-code.png"
-                      className="inline-flex items-center rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-200 hover:bg-white/5"
-                    >
-                      Download
-                    </a>
-                  </div>
+            {history.map((entry) => (
+              <div key={entry.id} className="rounded-lg border border-white/10 bg-zinc-900/60 p-2">
+                <p className="truncate text-sm text-slate-200">{entry.text}</p>
+                <p className="mt-1 text-[11px] text-slate-500">{new Date(entry.createdAt).toLocaleString()}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button variant="ghost" onClick={() => setText(entry.text)}>Load</Button>
                 </div>
-              );
-            })}
-            {history.length > displayedHistory.length ? (
-              <p className="text-xs text-slate-500">Showing latest {displayedHistory.length} of {history.length} saved codes.</p>
-            ) : null}
+              </div>
+            ))}
           </div>
         </details>
       </div>
@@ -143,84 +149,196 @@ function QrModule({ module }: { module: ToolModule }) {
   );
 }
 
-function ShortcutModule({ module }: { module: ToolModule }) {
-  const label = String(module.config.label || module.name);
-  const url = String(module.config.url || '/scripts');
+function ShortcutToolModule({ module }: { module: ToolModule }) {
+  const config = normalizeShortcutConfig(module.config, module.name);
+  const [posting, setPosting] = useState(false);
+  const [postResult, setPostResult] = useState<string | null>(null);
+
+  const runPostShortcut = async () => {
+    if (!config.url.trim()) {
+      setPostResult('Shortcut URL is missing.');
+      return;
+    }
+    setPosting(true);
+    setPostResult(null);
+    try {
+      const result = await toolsService.fetchProxy(config.url, 'POST');
+      setPostResult(`POST complete. Upstream status: ${result.status}`);
+    } catch (error) {
+      setPostResult(error instanceof Error ? error.message : 'Shortcut POST failed');
+    } finally {
+      setPosting(false);
+    }
+  };
 
   return (
     <Card title={module.name} description="Quick launch utility.">
       <div className="rounded-xl border border-white/10 bg-zinc-950/60 p-3">
-        <p className="text-sm text-slate-300">{label}</p>
-        <p className="mt-1 truncate text-xs text-slate-500">{url}</p>
-        <a
-          href={url}
-          className="mt-3 inline-flex items-center gap-1 rounded-lg bg-cyan-600 px-3 py-2 text-sm text-white"
-        >
-          <ExternalLink className="h-4 w-4" />
-          Open
-        </a>
+        <p className="text-sm text-slate-300">{config.label}</p>
+        <p className="mt-1 break-words text-xs text-slate-500">{config.url}</p>
+        <p className="mt-1 text-[11px] text-slate-500">Method: {config.method}</p>
+
+        <div className="mt-3">
+          {config.method === 'POST' ? (
+            <Button variant="outline" onClick={() => void runPostShortcut()} disabled={posting}>
+              {posting ? 'Running...' : 'Run POST'}
+            </Button>
+          ) : (
+            <a
+              href={config.url}
+              target={config.newTab ? '_blank' : '_self'}
+              rel={config.newTab ? 'noreferrer' : undefined}
+              className="inline-flex items-center gap-1 rounded-lg bg-cyan-600 px-3 py-2 text-sm text-white"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Open
+            </a>
+          )}
+        </div>
+
+        {postResult ? <p className="mt-2 text-xs text-slate-300">{postResult}</p> : null}
       </div>
     </Card>
   );
 }
 
-function ModuleRenderer({ module }: { module: ToolModule }) {
-  if (module.type === 'qr') return <QrModule module={module} />;
-  if (module.type === 'shortcut') return <ShortcutModule module={module} />;
-  return <Card title={module.name} description={`Unsupported module type: ${module.type}`} />;
+function ApiToolModule({ module }: { module: ToolModule }) {
+  const config = normalizeApiConfig(module.config);
+  return (
+    <Card title={module.name} description="Fetch and render API endpoint data.">
+      <ApiModuleView moduleId={module.id} title={module.name} config={config} />
+    </Card>
+  );
 }
+
+function ApiTesterToolModule({ module }: { module: ToolModule }) {
+  return (
+    <Card title={module.name} description="Legacy API tester module.">
+      <p className="text-sm text-slate-300">This module is preserved for compatibility. Edit and run from its legacy workflow.</p>
+    </Card>
+  );
+}
+
+function LegacyModule({ module }: { module: ToolModule }) {
+  console.warn('Unknown module type:', module.type);
+  return (
+    <Card title={module.name} description="Unsupported module type">
+      <p className="text-sm text-slate-400">Type `{module.type}` is not yet supported by the typed renderer.</p>
+    </Card>
+  );
+}
+
+function ModuleRenderer({ module, onSaveConfig }: { module: ToolModule; onSaveConfig: (module: ToolModule, config: Record<string, unknown>) => Promise<void> }) {
+  if (module.type === 'qr') return <QrToolModule module={module} onSaveConfig={onSaveConfig} />;
+  if (module.type === 'shortcut') return <ShortcutToolModule module={module} />;
+  if (module.type === 'api') return <ApiToolModule module={module} />;
+  if (module.type === 'api_tester') return <ApiTesterToolModule module={module} />;
+  return <LegacyModule module={module} />;
+}
+
+const DEFAULT_QR_CONFIG: QrModuleConfig = { defaultText: '', history: [] };
+const DEFAULT_SHORTCUT_CONFIG: ShortcutModuleConfig = { label: 'Shortcut', url: 'https://example.com', newTab: true, method: 'GET' };
+const DEFAULT_API_CONFIG: ApiModuleConfig = { endpoint: 'https://api.github.com', method: 'GET', display: 'raw' };
 
 export function ToolsPage() {
   const queryClient = useQueryClient();
+  const { setTools, addTool, updateTool, removeTool } = useAppStore();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ToolModule | null>(null);
   const [name, setName] = useState('');
   const [type, setType] = useState<ToolModuleType>('qr');
-  const [config, setConfig] = useState('{}');
+
+  const [qrConfig, setQrConfig] = useState<QrModuleConfig>(DEFAULT_QR_CONFIG);
+  const [shortcutConfig, setShortcutConfig] = useState<ShortcutModuleConfig>(DEFAULT_SHORTCUT_CONFIG);
+  const [apiConfig, setApiConfig] = useState<ApiModuleConfig>(DEFAULT_API_CONFIG);
+  const [rawConfig, setRawConfig] = useState('{}');
+  const [modulesState, setModulesState] = useState<ToolModule[]>([]);
+
   const [error, setError] = useState<string | null>(null);
+  const [apiTestResult, setApiTestResult] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const modulesQuery = useQuery({
     queryKey: ['tool-modules'],
     queryFn: toolsService.getModules,
   });
 
-  const utilityModules = useMemo(
-    () => (modulesQuery.data?.modules || []).filter((module) => module.type !== 'services'),
-    [modulesQuery.data?.modules],
-  );
+  useEffect(() => {
+    if (!modulesQuery.data?.modules) return;
+    setModulesState(modulesQuery.data.modules);
+    setTools(modulesQuery.data.modules);
+  }, [modulesQuery.data?.modules, setTools]);
+
+  const utilityModules = useMemo(() => modulesState.filter((module) => module.type !== 'services'), [modulesState]);
 
   const createMutation = useMutation({
-    mutationFn: (payload: { name: string; type: ToolModuleType; config: Record<string, unknown> }) => toolsService.createModule(payload),
-    onSuccess: async () => {
+    mutationFn: (payload: { name: string; type: ToolModuleType; config: Record<string, unknown> }) => {
+      console.log('Creating tool:', payload);
+      return toolsService.createTool(payload);
+    },
+    onSuccess: async (created) => {
+      console.log('Created tool response:', created);
+      setModulesState((previous) => [created, ...previous]);
+      addTool(created);
       await queryClient.invalidateQueries({ queryKey: ['tool-modules'] });
       setModalOpen(false);
       setEditing(null);
+      setSuccessMessage(`Tool created: ${created.name}`);
+    },
+    onError: (mutationError) => {
+      setError(mutationError instanceof Error ? mutationError.message : 'Failed to create tool module');
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: { name: string; type: ToolModuleType; config: Record<string, unknown> } }) =>
       toolsService.updateModule(id, payload),
-    onSuccess: async () => {
+    onSuccess: async (updated) => {
+      setModulesState((previous) => previous.map((module) => (module.id === updated.id ? updated : module)));
+      updateTool(updated);
       await queryClient.invalidateQueries({ queryKey: ['tool-modules'] });
       setModalOpen(false);
       setEditing(null);
+      setSuccessMessage(`Tool updated: ${updated.name}`);
+    },
+    onError: (mutationError) => {
+      setError(mutationError instanceof Error ? mutationError.message : 'Failed to update tool module');
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => toolsService.deleteModule(id),
-    onSuccess: async () => {
+    onSuccess: async (_, deletedId) => {
+      setModulesState((previous) => previous.filter((module) => module.id !== deletedId));
+      removeTool(deletedId);
       await queryClient.invalidateQueries({ queryKey: ['tool-modules'] });
+      setSuccessMessage('Tool deleted');
+    },
+    onError: (mutationError) => {
+      setError(mutationError instanceof Error ? mutationError.message : 'Failed to delete tool module');
     },
   });
+
+  const persistModuleConfig = async (module: ToolModule, config: Record<string, unknown>) => {
+    await toolsService.updateModule(module.id, {
+      name: module.name,
+      type: module.type,
+      config,
+    });
+    await queryClient.invalidateQueries({ queryKey: ['tool-modules'] });
+  };
 
   const openAdd = () => {
     setEditing(null);
     setName('');
     setType('qr');
-    setConfig('{}');
+    setQrConfig(DEFAULT_QR_CONFIG);
+    setShortcutConfig(DEFAULT_SHORTCUT_CONFIG);
+    setApiConfig(DEFAULT_API_CONFIG);
+    setRawConfig('{}');
+    setApiTestResult(null);
     setError(null);
+    setSuccessMessage(null);
     setModalOpen(true);
   };
 
@@ -228,9 +346,45 @@ export function ToolsPage() {
     setEditing(module);
     setName(module.name);
     setType(module.type);
-    setConfig(JSON.stringify(module.config || {}, null, 2));
+    setQrConfig(normalizeQrConfig(module.config));
+    setShortcutConfig(normalizeShortcutConfig(module.config, module.name));
+    setApiConfig(normalizeApiConfig(module.config));
+    setRawConfig(JSON.stringify(module.config || {}, null, 2));
+    setApiTestResult(null);
     setError(null);
+    setSuccessMessage(null);
     setModalOpen(true);
+  };
+
+  const selectedConfig = (): Record<string, unknown> => {
+    if (type === 'qr') return { defaultText: qrConfig.defaultText || '', history: qrConfig.history || [] };
+    if (type === 'shortcut') return {
+      label: shortcutConfig.label,
+      url: shortcutConfig.url,
+      newTab: shortcutConfig.newTab !== false,
+      method: shortcutConfig.method === 'POST' ? 'POST' : 'GET',
+    };
+    if (type === 'api') return {
+      endpoint: apiConfig.endpoint,
+      method: apiConfig.method === 'POST' ? 'POST' : 'GET',
+      refreshInterval: apiConfig.refreshInterval,
+      display: apiConfig.display || 'raw',
+    };
+    return JSON.parse(rawConfig || '{}') as Record<string, unknown>;
+  };
+
+  const runApiConfigTest = async () => {
+    if (!apiConfig.endpoint.trim()) {
+      setApiTestResult('Endpoint is required.');
+      return;
+    }
+    setApiTestResult('Testing endpoint...');
+    try {
+      const result = await toolsService.fetchProxy(apiConfig.endpoint, apiConfig.method === 'POST' ? 'POST' : 'GET');
+      setApiTestResult(`Success: upstream status ${result.status}`);
+    } catch (testError) {
+      setApiTestResult(testError instanceof Error ? testError.message : 'Endpoint test failed');
+    }
   };
 
   return (
@@ -251,13 +405,17 @@ export function ToolsPage() {
 
       {modulesQuery.isLoading ? <p className="text-sm text-slate-400">Loading tool modules...</p> : null}
       {modulesQuery.error instanceof Error ? <p className="text-sm text-rose-300">{modulesQuery.error.message}</p> : null}
+      {successMessage ? <p className="text-sm text-emerald-300">{successMessage}</p> : null}
 
-      <div className="grid gap-4">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {utilityModules.map((module) => (
           <div key={module.id} className="rounded-2xl border border-white/10 bg-zinc-900/40 p-2">
             <div className="mb-2 flex items-center justify-between gap-2 px-2">
               <div className="inline-flex items-center gap-2 text-sm text-slate-200">
-                {module.type === 'qr' ? <QrCode className="h-4 w-4 text-cyan-300" /> : <Wrench className="h-4 w-4 text-cyan-300" />}
+                {module.type === 'qr' ? <QrCode className="h-4 w-4 text-cyan-300" /> : null}
+                {module.type === 'api' ? <Server className="h-4 w-4 text-cyan-300" /> : null}
+                {module.type === 'api_tester' ? <Server className="h-4 w-4 text-cyan-300" /> : null}
+                {module.type !== 'qr' && module.type !== 'api' && module.type !== 'api_tester' ? <Wrench className="h-4 w-4 text-cyan-300" /> : null}
                 <span>{module.name}</span>
               </div>
               <div className="flex items-center gap-1">
@@ -280,14 +438,14 @@ export function ToolsPage() {
                 </button>
               </div>
             </div>
-            <ModuleRenderer module={module} />
+            <ModuleRenderer module={module} onSaveConfig={persistModuleConfig} />
           </div>
         ))}
       </div>
 
       {!modulesQuery.isLoading && !utilityModules.length ? (
         <Card>
-          <p className="text-sm text-slate-400">No utility modules yet. Add QR or Shortcut modules.</p>
+          <p className="text-sm text-slate-400">No utility modules yet. Add QR, Shortcut, or API modules.</p>
         </Card>
       ) : null}
 
@@ -301,6 +459,7 @@ export function ToolsPage() {
               className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-950/60 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300/40"
             />
           </label>
+
           <label className="block text-xs uppercase tracking-wide text-slate-400">
             Type
             <select
@@ -310,18 +469,139 @@ export function ToolsPage() {
             >
               <option value="qr">qr</option>
               <option value="shortcut">shortcut</option>
+              <option value="api">api</option>
+              <option value="api_tester">api_tester</option>
             </select>
           </label>
-          <label className="block text-xs uppercase tracking-wide text-slate-400">
-            Config (JSON)
-            <textarea
-              value={config}
-              onChange={(event) => setConfig(event.target.value)}
-              rows={8}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-950/60 px-3 py-2 font-mono text-xs text-white outline-none focus:border-cyan-300/40"
-            />
-          </label>
+
+          {type === 'qr' ? (
+            <label className="block text-xs uppercase tracking-wide text-slate-400">
+              Default Text
+              <input
+                value={qrConfig.defaultText || ''}
+                onChange={(event) => setQrConfig((prev) => ({ ...prev, defaultText: event.target.value }))}
+                className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-950/60 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300/40"
+              />
+            </label>
+          ) : null}
+
+          {type === 'shortcut' ? (
+            <div className="space-y-3">
+              <label className="block text-xs uppercase tracking-wide text-slate-400">
+                Label
+                <input
+                  value={shortcutConfig.label}
+                  onChange={(event) => setShortcutConfig((prev) => ({ ...prev, label: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-950/60 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300/40"
+                />
+              </label>
+
+              <label className="block text-xs uppercase tracking-wide text-slate-400">
+                URL
+                <input
+                  value={shortcutConfig.url}
+                  onChange={(event) => setShortcutConfig((prev) => ({ ...prev, url: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-950/60 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300/40"
+                />
+              </label>
+
+              <label className="block text-xs uppercase tracking-wide text-slate-400">
+                Method
+                <select
+                  value={shortcutConfig.method || 'GET'}
+                  onChange={(event) => setShortcutConfig((prev) => ({ ...prev, method: event.target.value as 'GET' | 'POST' }))}
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-950/60 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300/40"
+                >
+                  <option value="GET">GET</option>
+                  <option value="POST">POST</option>
+                </select>
+              </label>
+
+              <label className="inline-flex items-center gap-2 text-sm text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={shortcutConfig.newTab !== false}
+                  onChange={(event) => setShortcutConfig((prev) => ({ ...prev, newTab: event.target.checked }))}
+                  className="h-4 w-4 rounded border-white/20 bg-zinc-900"
+                />
+                Open GET links in new tab
+              </label>
+            </div>
+          ) : null}
+
+          {type === 'api' ? (
+            <div className="space-y-3">
+              <label className="block text-xs uppercase tracking-wide text-slate-400">
+                Endpoint URL
+                <input
+                  value={apiConfig.endpoint}
+                  onChange={(event) => setApiConfig((prev) => ({ ...prev, endpoint: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-950/60 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300/40"
+                />
+              </label>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block text-xs uppercase tracking-wide text-slate-400">
+                  Method
+                  <select
+                    value={apiConfig.method || 'GET'}
+                    onChange={(event) => setApiConfig((prev) => ({ ...prev, method: event.target.value as 'GET' | 'POST' }))}
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-950/60 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300/40"
+                  >
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                  </select>
+                </label>
+
+                <label className="block text-xs uppercase tracking-wide text-slate-400">
+                  Display
+                  <select
+                    value={apiConfig.display || 'raw'}
+                    onChange={(event) => setApiConfig((prev) => ({ ...prev, display: event.target.value as 'table' | 'card' | 'raw' }))}
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-950/60 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300/40"
+                  >
+                    <option value="table">table</option>
+                    <option value="card">card</option>
+                    <option value="raw">raw</option>
+                  </select>
+                </label>
+              </div>
+
+              <label className="block text-xs uppercase tracking-wide text-slate-400">
+                Refresh Interval (seconds, optional)
+                <input
+                  type="number"
+                  min={0}
+                  value={apiConfig.refreshInterval || ''}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    setApiConfig((prev) => ({ ...prev, refreshInterval: Number.isFinite(value) && value > 0 ? value : undefined }));
+                  }}
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-950/60 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300/40"
+                />
+              </label>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="outline" onClick={() => void runApiConfigTest()}>Test Endpoint</Button>
+                {apiTestResult ? <p className="text-xs text-slate-300">{apiTestResult}</p> : null}
+              </div>
+            </div>
+          ) : null}
+
+          {type !== 'qr' && type !== 'shortcut' && type !== 'api' ? (
+            <label className="block text-xs uppercase tracking-wide text-slate-400">
+              Legacy Config (JSON)
+              <textarea
+                value={rawConfig}
+                onChange={(event) => setRawConfig(event.target.value)}
+                rows={8}
+                className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-950/60 px-3 py-2 font-mono text-xs text-white outline-none focus:border-cyan-300/40"
+              />
+            </label>
+          ) : null}
+
           {error ? <p className="rounded-lg border border-rose-300/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{error}</p> : null}
+
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button>
             <Button
@@ -332,17 +612,17 @@ export function ToolsPage() {
                   setError('Name is required');
                   return;
                 }
+
                 try {
-                  const parsed = JSON.parse(config || '{}') as Record<string, unknown>;
+                  const payload = { name: name.trim(), type, config: selectedConfig() };
                   setError(null);
-                  const payload = { name: name.trim(), type, config: parsed };
                   if (editing) {
                     updateMutation.mutate({ id: editing.id, payload });
                     return;
                   }
                   createMutation.mutate(payload);
                 } catch {
-                  setError('Config must be valid JSON');
+                  setError('Config is invalid');
                 }
               }}
             >

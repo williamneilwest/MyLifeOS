@@ -1,4 +1,6 @@
 import { aiBuilderModule } from '../modules/ai-builder';
+import ApiModule from '../modules/api/ApiModule';
+import type { ToolModuleType } from '../modules/tools/types';
 import { databaseModule } from '../modules/database';
 import { dashboardModule } from '../modules/dashboard';
 import { financeModule } from '../modules/finance';
@@ -16,6 +18,22 @@ const allModules = [dashboardModule, servicesModule, workplaceModule, scriptsMod
 const primaryNavIds = new Set(['workplace', 'dashboard', 'tools']);
 
 export const lifeOsModules = allModules;
+
+function UnsupportedToolModule() {
+  return null;
+}
+
+// Tool module renderer registry (used by the Tools module for type-driven rendering).
+export const toolModuleRegistry: Record<ToolModuleType, unknown> = {
+  qr: UnsupportedToolModule,
+  shortcut: UnsupportedToolModule,
+  api: ApiModule,
+  api_tester: UnsupportedToolModule,
+  services: UnsupportedToolModule,
+};
+
+// Backward-compatible alias for consumers that expect `moduleRegistry`.
+export const moduleRegistry = toolModuleRegistry;
 
 export function getModuleNavItems(activeModules: ModuleId[]) {
   return lifeOsModules

@@ -1,4 +1,7 @@
 import json
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 from flask import Blueprint, current_app, request
 
@@ -9,6 +12,14 @@ from ..models import CommandSnippet, ToolLink, UserTool
 
 
 tools_bp = Blueprint('tools', __name__)
+
+
+def _is_supported_fetch_url(raw_url: str) -> bool:
+    try:
+        parsed = urlparse(raw_url)
+    except Exception:
+        return False
+    return parsed.scheme in {'http', 'https'} and bool(parsed.netloc)
 
 
 @tools_bp.get('/tools/', strict_slashes=False)
@@ -27,6 +38,27 @@ def get_tools_data():
 @tools_bp.post('/tools/', strict_slashes=False)
 def create_tool_link():
     data = request.get_json(silent=True) or {}
+    current_app.logger.info('[TOOLS] create /tools payload=%s', data)
+
+    # Compatibility path: allow module creation payloads on POST /api/tools.
+    if data.get('type') is not None or data.get('config') is not None:
+        name = str(data.get('name') or '').strip()
+        tool_type = str(data.get('type') or '').strip()
+        config = data.get('config') if isinstance(data.get('config'), dict) else {}
+        if not name:
+            return error_response('name is required', 400)
+        if not tool_type:
+            return error_response('type is required', 400)
+        try:
+            user = get_current_user()
+        except RuntimeError:
+            return error_response('Authentication required', 401)
+        module = UserTool(user_id=user.id, name=name, type=tool_type, config_json=json.dumps(config))
+        db.session.add(module)
+        db.session.commit()
+        current_app.logger.info('[TOOLS] created module (compat route) id=%s type=%s', module.id, module.type)
+        return success_response(module.to_dict(), 201)
+
     name = str(data.get('name', '')).strip()
     url = str(data.get('url', '')).strip()
 
@@ -43,6 +75,60 @@ def create_tool_link():
     db.session.commit()
 
     return success_response(link.to_dict(), 201)
+
+
+@tools_bp.route('/tools/fetch', methods=['GET', 'POST'], strict_slashes=False)
+@auth_required
+def proxy_fetch():
+    method = str(request.args.get('method') or request.form.get('method') or 'GET').upper()
+    if method not in {'GET', 'POST'}:
+        return error_response('method must be GET or POST', 400)
+
+    url = str(request.args.get('url') or request.form.get('url') or '').strip()
+    if not url:
+        return error_response('Missing URL', 400)
+    if not _is_supported_fetch_url(url):
+        return error_response('URL must be a valid http/https endpoint', 400)
+
+    try:
+        request_body = request.get_json(silent=True)
+        payload_bytes = None
+        if method == 'POST' and isinstance(request_body, dict):
+            payload_bytes = json.dumps(request_body).encode('utf-8')
+
+        outbound = Request(
+            url=url,
+            method=method,
+            data=payload_bytes,
+            headers={
+                'Accept': 'application/json, text/plain;q=0.9, */*;q=0.8',
+                'Content-Type': 'application/json',
+                'User-Agent': 'myLifeOS-tools-proxy/1.0',
+            },
+        )
+
+        with urlopen(outbound, timeout=10) as response:
+            status = response.getcode()
+            content_type = response.headers.get('Content-Type', '')
+            raw_text = response.read().decode('utf-8', errors='replace')
+
+            if 'application/json' in content_type.lower():
+                try:
+                    data = json.loads(raw_text)
+                except Exception:
+                    data = raw_text
+            else:
+                data = raw_text
+
+            return success_response({'status': status, 'data': data, 'contentType': content_type})
+    except HTTPError as error:
+        body = error.read().decode('utf-8', errors='replace') if hasattr(error, 'read') else str(error)
+        return error_response(f'Upstream HTTP {error.code}: {body[:500]}', 502)
+    except URLError as error:
+        return error_response(f'Upstream request failed: {error}', 502)
+    except Exception as error:  # noqa: BLE001
+        current_app.logger.exception('[TOOLS] proxy_fetch failed: %s', error)
+        return error_response(str(error), 500)
 
 
 def _ensure_default_user_tools(user_id: str) -> None:
@@ -80,6 +166,7 @@ def list_user_tools():
 def create_user_tool():
     user = get_current_user()
     payload = request.get_json(silent=True) or {}
+    current_app.logger.info('[TOOLS] create module payload=%s', payload)
     name = str(payload.get('name') or '').strip()
     tool_type = str(payload.get('type') or '').strip()
     config = payload.get('config') if isinstance(payload.get('config'), dict) else {}
@@ -90,6 +177,7 @@ def create_user_tool():
     module = UserTool(user_id=user.id, name=name, type=tool_type, config_json=json.dumps(config))
     db.session.add(module)
     db.session.commit()
+    current_app.logger.info('[TOOLS] created module id=%s type=%s', module.id, module.type)
     return success_response(module.to_dict(), 201)
 
 
