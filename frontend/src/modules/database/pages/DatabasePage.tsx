@@ -151,7 +151,7 @@ export function DatabasePage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-x-hidden pb-6">
       <SectionHeader
         eyebrow="Developer Tool"
         title="Database Management"
@@ -228,17 +228,17 @@ export function DatabasePage() {
               <div className="space-y-2">
                 {preview.map(([key, value]) => (
                   <div key={key} className="grid grid-cols-[100px_1fr] gap-2">
-                    <p className="text-[11px] uppercase tracking-wide text-slate-500">{key}</p>
-                    <p className="break-words text-xs text-slate-200">{typeof value === 'object' ? JSON.stringify(value) : String(value ?? '')}</p>
+                    <p className="truncate text-[11px] uppercase tracking-wide text-slate-500">{key}</p>
+                    <p className="line-clamp-2 break-words text-xs text-slate-200">{typeof value === 'object' ? JSON.stringify(value) : String(value ?? '')}</p>
                   </div>
                 ))}
 
                 <details>
-                  <summary className="cursor-pointer text-xs text-cyan-300">Expand</summary>
+                  <summary className="cursor-pointer text-xs text-cyan-300">Expand all fields ({entries.length})</summary>
                   <div className="mt-2 max-h-40 overflow-auto rounded-lg border border-white/10 bg-zinc-950/60 p-2">
                     {entries.map(([key, value]) => (
                       <div key={key} className="mb-1 grid grid-cols-[100px_1fr] gap-2 last:mb-0">
-                        <p className="text-[11px] uppercase tracking-wide text-slate-500">{key}</p>
+                        <p className="truncate text-[11px] uppercase tracking-wide text-slate-500">{key}</p>
                         <p className="break-words text-xs text-slate-200">{typeof value === 'object' ? JSON.stringify(value) : String(value ?? '')}</p>
                       </div>
                     ))}
@@ -292,40 +292,42 @@ export function DatabasePage() {
 
       <Modal title={modalMode === 'create' ? 'Add Record' : 'Edit Record'} open={modalOpen} onClose={() => setModalOpen(false)}>
         <div className="space-y-3">
-          {Object.keys(formData).map((key) => (
-            <label key={key} className="block text-xs uppercase tracking-wide text-slate-400">
-              {key}
+          <div className="max-h-[58vh] space-y-3 overflow-y-auto pr-1">
+            {Object.keys(formData).map((key) => (
+              <label key={key} className="block text-xs uppercase tracking-wide text-slate-400">
+                {key}
+                <input
+                  value={formData[key] ?? ''}
+                  onChange={(event) => setFormData((prev) => ({ ...prev, [key]: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-950/60 px-3 py-2 text-sm text-white outline-none"
+                />
+              </label>
+            ))}
+
+            {Object.keys(formData).length === 0 ? (
+              <p className="text-xs text-slate-400">No inferred fields for this table yet. Add a field below.</p>
+            ) : null}
+
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-zinc-950/40 p-2">
               <input
-                value={formData[key] ?? ''}
-                onChange={(event) => setFormData((prev) => ({ ...prev, [key]: event.target.value }))}
-                className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-950/60 px-3 py-2 text-sm text-white outline-none"
+                value={newFieldKey}
+                onChange={(event) => setNewFieldKey(event.target.value)}
+                placeholder="new_field_name"
+                className="rounded-lg border border-white/10 bg-zinc-950/60 px-3 py-2 text-sm text-white outline-none"
               />
-            </label>
-          ))}
-
-          {Object.keys(formData).length === 0 ? (
-            <p className="text-xs text-slate-400">No inferred fields for this table yet. Add a field below.</p>
-          ) : null}
-
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              value={newFieldKey}
-              onChange={(event) => setNewFieldKey(event.target.value)}
-              placeholder="new_field_name"
-              className="rounded-lg border border-white/10 bg-zinc-950/60 px-3 py-2 text-sm text-white outline-none"
-            />
-            <Button
-              variant="outline"
-              onClick={() => {
-                const key = newFieldKey.trim();
-                if (!key) return;
-                if (formData[key] !== undefined) return;
-                setFormData((prev) => ({ ...prev, [key]: '' }));
-                setNewFieldKey('');
-              }}
-            >
-              Add Field
-            </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const key = newFieldKey.trim();
+                  if (!key) return;
+                  if (formData[key] !== undefined) return;
+                  setFormData((prev) => ({ ...prev, [key]: '' }));
+                  setNewFieldKey('');
+                }}
+              >
+                Add Field
+              </Button>
+            </div>
           </div>
 
           <div className="flex justify-end gap-2">

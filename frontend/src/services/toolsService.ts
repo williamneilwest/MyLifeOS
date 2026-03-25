@@ -27,9 +27,10 @@ export const toolsService = {
   updateModule: (id: string, payload: { name?: string; type?: string; config?: Record<string, unknown> }) =>
     apiClient.put<ToolModule>(`/tool-modules/${id}`, payload),
   deleteModule: (id: string) => apiClient.delete(`/tool-modules/${id}`),
-  fetchProxy: (url: string, method: 'GET' | 'POST' = 'GET', body?: Record<string, unknown>) => {
+  fetchProxy: (url: string, method: 'GET' | 'POST' = 'GET', body?: Record<string, unknown>, timeout = 20) => {
     void body;
-    const query = new URLSearchParams({ url, method });
+    const safeTimeout = Number.isFinite(timeout) ? Math.max(3, Math.min(Math.floor(timeout), 120)) : 20;
+    const query = new URLSearchParams({ url, method, timeout: String(safeTimeout) });
     return apiClient.get<ToolsFetchResponse>(`/tools/fetch?${query.toString()}`);
   },
 };

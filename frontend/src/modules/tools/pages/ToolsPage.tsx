@@ -67,10 +67,11 @@ function getLastUsedTimestamp(module: ToolModule): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-type ToolCategory = 'all' | 'utilities' | 'api-dev' | 'quick-actions';
+type ToolCategory = 'all' | 'most-used' | 'utilities' | 'api-dev' | 'quick-actions';
 
 const CATEGORY_TABS: Array<{ id: ToolCategory; label: string }> = [
   { id: 'all', label: 'All' },
+  { id: 'most-used', label: 'Most Used' },
   { id: 'utilities', label: 'Utilities' },
   { id: 'api-dev', label: 'API / Dev' },
   { id: 'quick-actions', label: 'Quick Actions' },
@@ -78,6 +79,7 @@ const CATEGORY_TABS: Array<{ id: ToolCategory; label: string }> = [
 
 function matchesCategory(module: ToolModule, category: ToolCategory): boolean {
   if (category === 'all') return true;
+  if (category === 'most-used') return getUsageCount(module) > 0;
   if (category === 'utilities') return module.type === 'qr' || module.type === 'shortcut' || module.type === 'api';
   if (category === 'api-dev') return module.type === 'api' || module.type === 'api_tester';
   if (category === 'quick-actions') return module.type === 'shortcut';
@@ -358,9 +360,9 @@ export function ToolsPage() {
       const lastUsedDelta = getLastUsedTimestamp(right) - getLastUsedTimestamp(left);
       if (lastUsedDelta !== 0) return lastUsedDelta;
 
-      const rightUpdated = Date.parse(right.updated_at || '') || 0;
-      const leftUpdated = Date.parse(left.updated_at || '') || 0;
-      return rightUpdated - leftUpdated;
+      const rightCreated = Date.parse(right.created_at || '') || 0;
+      const leftCreated = Date.parse(left.created_at || '') || 0;
+      return rightCreated - leftCreated;
     });
 
     return sorted.filter((module) => matchesCategory(module, activeCategory));

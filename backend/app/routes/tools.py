@@ -81,21 +81,32 @@ def proxy_fetch():
     try:
         raw_url = request.args.get('url')
         method = str(request.args.get('method') or 'GET').upper()
+        timeout_raw = request.args.get('timeout')
 
         if not raw_url:
             return jsonify({'error': 'Missing URL'}), 400
+        if method not in {'GET', 'POST'}:
+            return jsonify({'error': 'method must be GET or POST'}), 400
 
         url = urllib.parse.unquote(raw_url)
         if not _is_supported_fetch_url(url):
             return jsonify({'error': 'URL must be a valid http/https endpoint'}), 400
 
-        current_app.logger.info('[TOOLS] Fetching upstream url=%s method=%s', url, method)
+        timeout_seconds = 20.0
+        if timeout_raw is not None:
+            try:
+                timeout_seconds = float(timeout_raw)
+            except (TypeError, ValueError):
+                return jsonify({'error': 'timeout must be a number'}), 400
+
+        timeout_seconds = max(3.0, min(timeout_seconds, 120.0))
+        current_app.logger.info('[TOOLS] Fetching upstream url=%s method=%s timeout=%.1fs', url, method, timeout_seconds)
 
         headers = {'User-Agent': 'LifeOS-API-Tester'}
         if method == 'POST':
-            res = requests.post(url, headers=headers, timeout=10)
+            res = requests.post(url, headers=headers, timeout=timeout_seconds)
         else:
-            res = requests.get(url, headers=headers, timeout=10)
+            res = requests.get(url, headers=headers, timeout=timeout_seconds)
 
         content_type = res.headers.get('Content-Type', '')
         if 'application/json' in content_type.lower():
@@ -111,6 +122,18 @@ def proxy_fetch():
             'contentType': content_type,
             'data': data,
         })
+    except requests.Timeout as error:
+        current_app.logger.warning('[TOOLS] proxy_fetch timeout: %s', error)
+        return jsonify({
+            'error': str(error),
+            'message': 'Upstream request timed out',
+        }), 504
+    except requests.RequestException as error:
+        current_app.logger.warning('[TOOLS] proxy_fetch request error: %s', error)
+        return jsonify({
+            'error': str(error),
+            'message': 'Upstream request failed',
+        }), 502
     except Exception as error:  # noqa: BLE001
         current_app.logger.exception('[TOOLS] proxy_fetch failed: %s', error)
         return jsonify({

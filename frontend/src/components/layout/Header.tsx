@@ -53,8 +53,8 @@ export function Header({ onMenuClick }: HeaderProps) {
 
     if (location.pathname.startsWith('/homelab')) {
       return {
-        label: 'Restart Services',
-        onClick: () => window.dispatchEvent(new CustomEvent('homelab:restart-requested')),
+        label: 'Check Status',
+        onClick: () => window.dispatchEvent(new CustomEvent('homelab:check-status-requested')),
       };
     }
 
