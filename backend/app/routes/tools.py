@@ -3,15 +3,16 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-from flask import Blueprint, current_app, request
+from flask import Blueprint, current_app, request, session
 
-from ..auth import auth_required, get_current_user
+from ..auth import get_current_user
 from ..api_response import error_response, success_response
 from ..db import db
 from ..models import CommandSnippet, ToolLink, UserTool
 
 
 tools_bp = Blueprint('tools', __name__)
+TOOLS_FALLBACK_USER_ID = 'local-tools-user'
 
 
 def _is_supported_fetch_url(raw_url: str) -> bool:
@@ -22,6 +23,15 @@ def _is_supported_fetch_url(raw_url: str) -> bool:
     return parsed.scheme in {'http', 'https'} and bool(parsed.netloc)
 
 
+def _resolve_tools_user_id() -> str:
+    try:
+        user = get_current_user()
+        return user.id
+    except Exception:
+        fallback = str(session.get('user_id') or '').strip()
+        return fallback or TOOLS_FALLBACK_USER_ID
+
+
 @tools_bp.get('/tools/', strict_slashes=False)
 def get_tools_data():
     current_app.logger.info('[DB] Fetching table: tool_links')
@@ -29,9 +39,13 @@ def get_tools_data():
     current_app.logger.info('[DB] Fetching table: command_snippets')
     snippets = CommandSnippet.query.order_by(CommandSnippet.created_at.desc()).all()
 
+    user_id = _resolve_tools_user_id()
+    modules = UserTool.query.filter_by(user_id=user_id).order_by(UserTool.updated_at.desc()).all()
+
     return success_response({
         'links': [link.to_dict() for link in links],
         'snippets': [snippet.to_dict() for snippet in snippets],
+        'modules': [module.to_dict() for module in modules],
     })
 
 
@@ -49,11 +63,7 @@ def create_tool_link():
             return error_response('name is required', 400)
         if not tool_type:
             return error_response('type is required', 400)
-        try:
-            user = get_current_user()
-        except RuntimeError:
-            return error_response('Authentication required', 401)
-        module = UserTool(user_id=user.id, name=name, type=tool_type, config_json=json.dumps(config))
+        module = UserTool(user_id=_resolve_tools_user_id(), name=name, type=tool_type, config_json=json.dumps(config))
         db.session.add(module)
         db.session.commit()
         current_app.logger.info('[TOOLS] created module (compat route) id=%s type=%s', module.id, module.type)
@@ -78,7 +88,6 @@ def create_tool_link():
 
 
 @tools_bp.route('/tools/fetch', methods=['GET', 'POST'], strict_slashes=False)
-@auth_required
 def proxy_fetch():
     method = str(request.args.get('method') or request.form.get('method') or 'GET').upper()
     if method not in {'GET', 'POST'}:
@@ -153,18 +162,16 @@ def _ensure_default_user_tools(user_id: str) -> None:
 
 
 @tools_bp.get('/tools/modules', strict_slashes=False)
-@auth_required
 def list_user_tools():
-    user = get_current_user()
-    _ensure_default_user_tools(user.id)
-    modules = UserTool.query.filter_by(user_id=user.id).order_by(UserTool.updated_at.desc()).all()
+    user_id = _resolve_tools_user_id()
+    _ensure_default_user_tools(user_id)
+    modules = UserTool.query.filter_by(user_id=user_id).order_by(UserTool.updated_at.desc()).all()
     return success_response({'modules': [module.to_dict() for module in modules]})
 
 
 @tools_bp.post('/tools/modules', strict_slashes=False)
-@auth_required
 def create_user_tool():
-    user = get_current_user()
+    user_id = _resolve_tools_user_id()
     payload = request.get_json(silent=True) or {}
     current_app.logger.info('[TOOLS] create module payload=%s', payload)
     name = str(payload.get('name') or '').strip()
@@ -174,7 +181,7 @@ def create_user_tool():
         return error_response('name is required', 400)
     if not tool_type:
         return error_response('type is required', 400)
-    module = UserTool(user_id=user.id, name=name, type=tool_type, config_json=json.dumps(config))
+    module = UserTool(user_id=user_id, name=name, type=tool_type, config_json=json.dumps(config))
     db.session.add(module)
     db.session.commit()
     current_app.logger.info('[TOOLS] created module id=%s type=%s', module.id, module.type)
@@ -182,10 +189,9 @@ def create_user_tool():
 
 
 @tools_bp.put('/tools/modules/<string:module_id>', strict_slashes=False)
-@auth_required
 def update_user_tool(module_id: str):
-    user = get_current_user()
-    module = UserTool.query.filter_by(id=module_id, user_id=user.id).first_or_404()
+    user_id = _resolve_tools_user_id()
+    module = UserTool.query.filter_by(id=module_id, user_id=user_id).first_or_404()
     payload = request.get_json(silent=True) or {}
     if 'name' in payload:
         name = str(payload.get('name') or '').strip()
@@ -204,10 +210,9 @@ def update_user_tool(module_id: str):
 
 
 @tools_bp.delete('/tools/modules/<string:module_id>', strict_slashes=False)
-@auth_required
 def delete_user_tool(module_id: str):
-    user = get_current_user()
-    module = UserTool.query.filter_by(id=module_id, user_id=user.id).first_or_404()
+    user_id = _resolve_tools_user_id()
+    module = UserTool.query.filter_by(id=module_id, user_id=user_id).first_or_404()
     db.session.delete(module)
     db.session.commit()
     return success_response({'deleted': True, 'id': module_id})

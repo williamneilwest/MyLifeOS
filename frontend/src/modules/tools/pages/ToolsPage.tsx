@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { ExternalLink, Pencil, Plus, QrCode, Server, Trash2, Wrench } from 'lucide-react';
 import ApiModuleView from '../../api/ApiModule';
 import { Badge, Button, Card, Modal, SectionHeader } from '../../../components/ui';
 import { toolsService } from '../../../services/toolsService';
-import { useAppStore } from '../../../store/useAppStore';
 import type { ApiModuleConfig, QrHistoryEntry, QrModuleConfig, ShortcutModuleConfig, ToolModule, ToolModuleType } from '../types';
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -241,8 +240,6 @@ const DEFAULT_SHORTCUT_CONFIG: ShortcutModuleConfig = { label: 'Shortcut', url: 
 const DEFAULT_API_CONFIG: ApiModuleConfig = { endpoint: 'https://api.github.com', method: 'GET', display: 'raw' };
 
 export function ToolsPage() {
-  const queryClient = useQueryClient();
-  const { setTools, addTool, updateTool, removeTool } = useAppStore();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ToolModule | null>(null);
   const [name, setName] = useState('');
@@ -252,7 +249,6 @@ export function ToolsPage() {
   const [shortcutConfig, setShortcutConfig] = useState<ShortcutModuleConfig>(DEFAULT_SHORTCUT_CONFIG);
   const [apiConfig, setApiConfig] = useState<ApiModuleConfig>(DEFAULT_API_CONFIG);
   const [rawConfig, setRawConfig] = useState('{}');
-  const [modulesState, setModulesState] = useState<ToolModule[]>([]);
 
   const [error, setError] = useState<string | null>(null);
   const [apiTestResult, setApiTestResult] = useState<string | null>(null);
@@ -264,12 +260,15 @@ export function ToolsPage() {
   });
 
   useEffect(() => {
-    if (!modulesQuery.data?.modules) return;
-    setModulesState(modulesQuery.data.modules);
-    setTools(modulesQuery.data.modules);
-  }, [modulesQuery.data?.modules, setTools]);
+    void modulesQuery.refetch();
+    // Explicit initial fetch to keep backend as source of truth.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const utilityModules = useMemo(() => modulesState.filter((module) => module.type !== 'services'), [modulesState]);
+  const utilityModules = useMemo(
+    () => (modulesQuery.data?.modules || []).filter((module) => module.type !== 'services'),
+    [modulesQuery.data?.modules],
+  );
 
   const createMutation = useMutation({
     mutationFn: (payload: { name: string; type: ToolModuleType; config: Record<string, unknown> }) => {
@@ -278,9 +277,7 @@ export function ToolsPage() {
     },
     onSuccess: async (created) => {
       console.log('Created tool response:', created);
-      setModulesState((previous) => [created, ...previous]);
-      addTool(created);
-      await queryClient.invalidateQueries({ queryKey: ['tool-modules'] });
+      await modulesQuery.refetch();
       setModalOpen(false);
       setEditing(null);
       setSuccessMessage(`Tool created: ${created.name}`);
@@ -294,9 +291,7 @@ export function ToolsPage() {
     mutationFn: ({ id, payload }: { id: string; payload: { name: string; type: ToolModuleType; config: Record<string, unknown> } }) =>
       toolsService.updateModule(id, payload),
     onSuccess: async (updated) => {
-      setModulesState((previous) => previous.map((module) => (module.id === updated.id ? updated : module)));
-      updateTool(updated);
-      await queryClient.invalidateQueries({ queryKey: ['tool-modules'] });
+      await modulesQuery.refetch();
       setModalOpen(false);
       setEditing(null);
       setSuccessMessage(`Tool updated: ${updated.name}`);
@@ -308,10 +303,8 @@ export function ToolsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => toolsService.deleteModule(id),
-    onSuccess: async (_, deletedId) => {
-      setModulesState((previous) => previous.filter((module) => module.id !== deletedId));
-      removeTool(deletedId);
-      await queryClient.invalidateQueries({ queryKey: ['tool-modules'] });
+    onSuccess: async () => {
+      await modulesQuery.refetch();
       setSuccessMessage('Tool deleted');
     },
     onError: (mutationError) => {
@@ -325,7 +318,7 @@ export function ToolsPage() {
       type: module.type,
       config,
     });
-    await queryClient.invalidateQueries({ queryKey: ['tool-modules'] });
+    await modulesQuery.refetch();
   };
 
   const openAdd = () => {

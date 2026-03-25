@@ -114,7 +114,6 @@ export const useAppStore = create<AppStore>()(
       partialize: (state) => ({
         preferences: state.preferences,
         activeModules: state.activeModules,
-        tools: state.tools,
       }),
     },
   ),
