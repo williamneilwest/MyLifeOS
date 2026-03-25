@@ -12,6 +12,7 @@ class Project(db.Model):
     id = db.Column(db.String(64), primary_key=True, default=lambda: str(uuid4()))
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=False, default='')
+    type = db.Column(db.String(20), nullable=False, default='custom')
     status = db.Column(db.String(40), nullable=False, default='Backlog')
     notes = db.Column(db.Text, nullable=False, default='')
     link = db.Column(db.Text, nullable=True)
@@ -23,6 +24,7 @@ class Project(db.Model):
             'id': self.id,
             'name': self.name,
             'description': self.description or '',
+            'type': self.type or 'custom',
             'status': self.status,
             'notes': self.notes,
             'link': self.link,

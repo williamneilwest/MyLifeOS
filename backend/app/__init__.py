@@ -102,6 +102,45 @@ def _ensure_projects_description_column() -> None:
     db.session.commit()
 
 
+def _ensure_projects_type_column() -> None:
+    inspector = inspect(db.engine)
+    if 'projects' not in inspector.get_table_names():
+        return
+
+    column_names = {column['name'] for column in inspector.get_columns('projects')}
+    if 'type' in column_names:
+        return
+
+    db.session.execute(text("ALTER TABLE projects ADD COLUMN type VARCHAR(20) NOT NULL DEFAULT 'custom'"))
+    db.session.commit()
+
+
+def _ensure_tasks_extended_columns() -> None:
+    inspector = inspect(db.engine)
+    if 'tasks' not in inspector.get_table_names():
+        return
+
+    column_names = {column['name'] for column in inspector.get_columns('tasks')}
+
+    statements = []
+    if 'description' not in column_names:
+        statements.append("ALTER TABLE tasks ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+    if 'details' not in column_names:
+        statements.append("ALTER TABLE tasks ADD COLUMN details TEXT NOT NULL DEFAULT ''")
+    if 'category' not in column_names:
+        statements.append("ALTER TABLE tasks ADD COLUMN category VARCHAR(50) NOT NULL DEFAULT 'General'")
+    if 'depends_on' not in column_names:
+        statements.append("ALTER TABLE tasks ADD COLUMN depends_on JSONB NOT NULL DEFAULT '[]'::jsonb")
+    if 'auto_complete_rule' not in column_names:
+        statements.append("ALTER TABLE tasks ADD COLUMN auto_complete_rule TEXT")
+
+    for statement in statements:
+        db.session.execute(text(statement))
+
+    if statements:
+        db.session.commit()
+
+
 def _ensure_quick_links_table() -> None:
     from .models import QuickLink
 
@@ -245,6 +284,8 @@ def create_app(config_class: type[Config] = Config) -> Flask:
             _ensure_tool_modules_table()
 
             _ensure_projects_description_column()
+            _ensure_projects_type_column()
+            _ensure_tasks_extended_columns()
 
             expected_tables = set(db.metadata.tables.keys())
             actual_tables = set(inspect(db.engine).get_table_names())
