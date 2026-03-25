@@ -8,13 +8,10 @@ import { Sidebar } from './Sidebar';
 
 export function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const location = useLocation();
   const sidebarCollapsed = useAppStore((state) => state.preferences.sidebarCollapsed);
   const activeModules = useAppStore((state) => state.activeModules);
-  const setActiveModules = useAppStore((state) => state.setActiveModules);
   const hideMobileTabs = useAppStore((state) => state.preferences.hideMobileTabs);
-  const toggleHideMobileTabs = useAppStore((state) => state.toggleHideMobileTabs);
   const navItems = getModuleNavItems(activeModules);
 
   useEffect(() => {
@@ -60,63 +57,6 @@ export function AppLayout() {
           })}
         </div>
       </nav>
-      ) : null}
-
-      <button
-        type="button"
-        onClick={() => setSettingsOpen(true)}
-        className="fixed bottom-[calc(env(safe-area-inset-bottom,0)+1rem)] left-3 z-50 rounded-full border border-white/15 bg-zinc-900/90 px-3 py-2 text-xs text-slate-200 shadow-lg backdrop-blur hover:border-cyan-300/40 lg:bottom-4 lg:left-4"
-      >
-        Settings
-      </button>
-
-      {settingsOpen ? (
-        <div className="fixed inset-0 z-[60] bg-zinc-950/75" onClick={() => setSettingsOpen(false)}>
-          <div
-            className="absolute bottom-0 left-0 right-0 max-h-[82vh] overflow-y-auto rounded-t-2xl border-t border-white/10 bg-zinc-900 p-4 lg:bottom-4 lg:left-4 lg:right-auto lg:top-auto lg:w-[360px] lg:rounded-2xl lg:border"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-semibold text-white">Settings</p>
-              <button className="rounded border border-white/10 px-2 py-1 text-xs text-slate-300" onClick={() => setSettingsOpen(false)}>Close</button>
-            </div>
-            <div className="space-y-3 text-sm">
-              <div className="rounded-xl border border-white/10 bg-zinc-950/60 p-3">
-                <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">Navigation</p>
-                <label className="flex items-center justify-between gap-2">
-                  <span className="text-slate-200">Hide bottom tabs</span>
-                  <input type="checkbox" checked={hideMobileTabs} onChange={toggleHideMobileTabs} />
-                </label>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-zinc-950/60 p-3">
-                <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">Module Visibility</p>
-                <div className="space-y-2">
-                  {getModuleNavItems(['workplace', 'dashboard', 'tools']).map((item) => {
-                    const active = activeModules.includes(item.id);
-                    return (
-                      <label key={item.id} className="flex items-center justify-between gap-2">
-                        <span className="text-slate-200">{item.label}</span>
-                        <input
-                          type="checkbox"
-                          checked={active}
-                          onChange={() => {
-                            const next = active
-                              ? activeModules.filter((id) => id !== item.id)
-                              : [...activeModules, item.id];
-                            setActiveModules(next.length ? next : activeModules);
-                          }}
-                        />
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-zinc-950/60 p-3 text-xs text-slate-300">
-                Manage quick links in Workplace and tool modules in Tools.
-              </div>
-            </div>
-          </div>
-        </div>
       ) : null}
     </div>
   );

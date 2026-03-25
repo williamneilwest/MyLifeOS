@@ -1,4 +1,4 @@
-import { Activity, CircleDollarSign, FolderKanban, ListChecks, TerminalSquare } from 'lucide-react';
+import { Activity, CircleDollarSign, FolderKanban, ListChecks, Server, TerminalSquare, Wrench } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -16,6 +16,22 @@ import { useProjects } from '../modules/projects/hooks/useProjects';
 import { useTasks } from '../modules/tasks/hooks/useTasks';
 import { getDashboardSummary } from '../services/api';
 
+type DashboardMode = 'overview' | 'workspace' | 'homelab' | 'tools';
+
+const MODE_TABS: Array<{ id: DashboardMode; label: string }> = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'workspace', label: 'Workspace' },
+  { id: 'homelab', label: 'Homelab' },
+  { id: 'tools', label: 'Tools' },
+];
+
+const HOMELAB_SERVICES = [
+  { id: 'portainer', name: 'Portainer', status: 'online', url: '/homelab' },
+  { id: 'grafana', name: 'Grafana', status: 'online', url: '/homelab' },
+  { id: 'pihole', name: 'Pi-hole', status: 'offline', url: '/homelab' },
+  { id: 'proxmox', name: 'Proxmox', status: 'online', url: '/homelab' },
+];
+
 function toGridStatus(status: string): 'running' | 'idle' | 'blocked' {
   if (status === 'In Progress') {
     return 'running';
@@ -31,6 +47,7 @@ function toGridStatus(status: string): 'running' | 'idle' | 'blocked' {
 export function Dashboard() {
   const navigate = useNavigate();
   const [focusMode, setFocusMode] = useState(false);
+  const [mode, setMode] = useState<DashboardMode>('overview');
 
   const { projects, loading: projectsLoading, error: projectsError } = useProjects();
   const { tasks, loading: tasksLoading, error: tasksError } = useTasks();
@@ -49,7 +66,6 @@ export function Dashboard() {
   const today = new Date().toISOString().slice(0, 10);
   const activeTasks = dashboardSummary?.pending_tasks ?? tasks.filter((task) => task.status !== 'done').length;
   const blockers = projects.filter((project) => project.status === 'Blocked').length;
-  const urgent = tasks.filter((task) => task.priority === 'high' && task.status !== 'done').length;
   const overdue = tasks.filter((task) => task.dueDate < today && task.status !== 'done').length;
   const totalProjects = dashboardSummary?.total_projects ?? projects.length;
   const planningCount = dashboardSummary?.planning_count ?? goals.length;
@@ -58,7 +74,7 @@ export function Dashboard() {
   const commandStats = {
     tasks: activeTasks,
     blockers,
-    urgent,
+    urgent: tasks.filter((task) => task.priority === 'high' && task.status !== 'done').length,
     pending: activeTasks,
     financialFlow: totalBalance >= 0 ? 'strong' : 'watch',
   };
@@ -115,120 +131,239 @@ export function Dashboard() {
   const isLoadingDashboard = projectsLoading || tasksLoading || financeLoading || planningLoading || summaryLoading;
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="space-y-4 overflow-x-hidden md:space-y-6">
+      <div className="overflow-x-auto pb-1">
+        <div className="inline-flex min-w-full gap-2 sm:min-w-0">
+          {MODE_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setMode(tab.id)}
+              className={`rounded-full border px-3 py-2 text-xs transition-all ${
+                mode === tab.id
+                  ? 'border-emerald-400/35 bg-emerald-500/15 text-emerald-100 shadow-[0_0_18px_rgba(16,185,129,0.2)]'
+                  : 'border-white/10 bg-zinc-900/40 text-slate-300 hover:border-white/20'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {isLoadingDashboard ? <p className="text-sm text-slate-400">Loading dashboard data...</p> : null}
       {dashboardError ? <p className="text-sm text-rose-300">Dashboard data partially unavailable: {dashboardError}</p> : null}
 
-      <CommandCenter
-        userName="Will"
-        stats={commandStats}
-        focusMode={focusMode}
-        onRunMyDay={() => navigate('/projects')}
-        onToggleFocusMode={() => setFocusMode((prev) => !prev)}
-        onSyncAllData={() => navigate('/tools')}
-      />
-
-      <AIProjectGenerator />
-
-      <RecommendationsPanel items={filteredRecommendations} />
-
-      <QuickActions
-        actions={[
-          { id: 'qa1', label: 'Run Daily Sync', icon: Activity, onClick: () => navigate('/projects') },
-          { id: 'qa2', label: 'Log Progress', icon: ListChecks, onClick: () => navigate('/tasks') },
-          { id: 'qa3', label: 'Capture Expense', icon: CircleDollarSign, onClick: () => navigate('/finance') },
-          { id: 'qa4', label: 'Open Projects', icon: FolderKanban, onClick: () => navigate('/projects') },
-          { id: 'qa5', label: 'Execute Script', icon: TerminalSquare, onClick: () => navigate('/tools') },
-        ]}
-        onConfigure={() => navigate('/tools')}
-      />
-
-      <div className="lg:hidden">
-        <RightSidebar mode="focus-only" onStartFocus={() => setFocusMode(true)} />
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px] md:gap-6">
-        <div className="space-y-4 md:space-y-6">
-          <FeaturedCards
-            items={[
-              {
-                id: 'f1',
-                title: 'Daily Orchestration',
-                description: 'Morning workflow bundle and task sync pipeline.',
-                progress: activeTasks > 0 ? Math.max(30, 100 - activeTasks * 5) : 90,
-                status: blockers > 0 ? 'idle' : 'running',
-                metric: `${activeTasks} active tasks / ${totalProjects} projects`,
-                onOpen: () => navigate('/projects'),
-              },
-              {
-                id: 'f2',
-                title: 'Financial Control Loop',
-                description: 'Budgeting, transaction reconciliation, and allocation checks.',
-                progress: income > 0 ? Math.max(20, Math.min(95, Math.round((1 - expense / income) * 100))) : 50,
-                status: 'idle',
-                metric: `${planningCount} tracked goals`,
-                onOpen: () => navigate('/finance'),
-              },
-            ]}
+      {mode === 'overview' ? (
+        <>
+          <CommandCenter
+            userName="Will"
+            stats={commandStats}
+            focusMode={focusMode}
+            onRunMyDay={() => navigate('/projects')}
+            onToggleFocusMode={() => setFocusMode((prev) => !prev)}
+            onSyncAllData={() => navigate('/tools')}
           />
 
-          {primaryProject && (
-            <ProjectGrid
-              primary={{
-                id: primaryProject.id,
-                name: primaryProject.name,
-                status: toGridStatus(primaryProject.status),
-                summary: primaryProject.notes,
-                keyTasks: tasks.slice(0, 3).map((task) => task.title),
-                onOpen: () => navigate('/projects'),
-              }}
-              secondary={secondaryProjects.map((project) => ({
-                id: project.id,
-                name: project.name,
-                status: toGridStatus(project.status),
-                summary: project.notes,
-                keyTasks: [],
-                onOpen: () => navigate('/projects'),
-              }))}
-            />
-          )}
+          <AIProjectGenerator />
 
-          <FinancePanel
-            metrics={[
-              {
-                id: 'm1',
-                label: 'Cashflow',
-                value: `$${totalBalance.toLocaleString()}`,
-                delta: totalBalance >= 0 ? 'Positive this cycle' : 'Negative this cycle',
-                trend: totalBalance >= 0 ? 'up' : 'down',
-              },
-              {
-                id: 'm2',
-                label: 'Savings',
-                value: `$${savings.toLocaleString()}`,
-                delta: 'Current tracked total',
-                trend: 'up',
-              },
-              {
-                id: 'm3',
-                label: 'Variable Spend',
-                value: `$${expense.toLocaleString()}`,
-                delta: 'Current tracked total',
-                trend: 'down',
-              },
+          <RecommendationsPanel items={filteredRecommendations} />
+
+          <QuickActions
+            actions={[
+              { id: 'qa1', label: 'Run Daily Sync', icon: Activity, onClick: () => navigate('/projects') },
+              { id: 'qa2', label: 'Log Progress', icon: ListChecks, onClick: () => navigate('/tasks') },
+              { id: 'qa3', label: 'Capture Expense', icon: CircleDollarSign, onClick: () => navigate('/finance') },
+              { id: 'qa4', label: 'Open Projects', icon: FolderKanban, onClick: () => navigate('/projects') },
+              { id: 'qa5', label: 'Execute Script', icon: TerminalSquare, onClick: () => navigate('/tools') },
             ]}
-            onOpenFinance={() => navigate('/finance')}
+            onConfigure={() => navigate('/tools')}
           />
-        </div>
 
-        <div className="hidden lg:block">
-          <RightSidebar onStartFocus={() => setFocusMode(true)} />
-        </div>
-      </div>
+          <div className="lg:hidden">
+            <RightSidebar mode="focus-only" onStartFocus={() => setFocusMode(true)} />
+          </div>
 
-      <div className="space-y-4 lg:hidden md:space-y-6">
-        <RightSidebar mode="mobile-secondary" onStartFocus={() => setFocusMode(true)} />
-      </div>
+          <div className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="space-y-4 md:space-y-6">
+              <FeaturedCards
+                items={[
+                  {
+                    id: 'f1',
+                    title: 'Daily Orchestration',
+                    description: 'Morning workflow bundle and task sync pipeline.',
+                    progress: activeTasks > 0 ? Math.max(30, 100 - activeTasks * 5) : 90,
+                    status: blockers > 0 ? 'idle' : 'running',
+                    metric: `${activeTasks} active tasks / ${totalProjects} projects`,
+                    onOpen: () => navigate('/projects'),
+                  },
+                  {
+                    id: 'f2',
+                    title: 'Financial Control Loop',
+                    description: 'Budgeting, transaction reconciliation, and allocation checks.',
+                    progress: income > 0 ? Math.max(20, Math.min(95, Math.round((1 - expense / income) * 100))) : 50,
+                    status: 'idle',
+                    metric: `${planningCount} tracked goals`,
+                    onOpen: () => navigate('/finance'),
+                  },
+                ]}
+              />
+
+              {primaryProject && (
+                <ProjectGrid
+                  primary={{
+                    id: primaryProject.id,
+                    name: primaryProject.name,
+                    status: toGridStatus(primaryProject.status),
+                    summary: primaryProject.notes,
+                    keyTasks: tasks.slice(0, 3).map((task) => task.title),
+                    onOpen: () => navigate('/projects'),
+                  }}
+                  secondary={secondaryProjects.map((project) => ({
+                    id: project.id,
+                    name: project.name,
+                    status: toGridStatus(project.status),
+                    summary: project.notes,
+                    keyTasks: [],
+                    onOpen: () => navigate('/projects'),
+                  }))}
+                />
+              )}
+
+              <FinancePanel
+                metrics={[
+                  {
+                    id: 'm1',
+                    label: 'Cashflow',
+                    value: `$${totalBalance.toLocaleString()}`,
+                    delta: totalBalance >= 0 ? 'Positive this cycle' : 'Negative this cycle',
+                    trend: totalBalance >= 0 ? 'up' : 'down',
+                  },
+                  {
+                    id: 'm2',
+                    label: 'Savings',
+                    value: `$${savings.toLocaleString()}`,
+                    delta: 'Current tracked total',
+                    trend: 'up',
+                  },
+                  {
+                    id: 'm3',
+                    label: 'Variable Spend',
+                    value: `$${expense.toLocaleString()}`,
+                    delta: 'Current tracked total',
+                    trend: 'down',
+                  },
+                ]}
+                onOpenFinance={() => navigate('/finance')}
+              />
+            </div>
+
+            <div className="hidden lg:block">
+              <RightSidebar onStartFocus={() => setFocusMode(true)} />
+            </div>
+          </div>
+
+          <div className="space-y-4 md:space-y-6 lg:hidden">
+            <RightSidebar mode="mobile-secondary" onStartFocus={() => setFocusMode(true)} />
+          </div>
+        </>
+      ) : null}
+
+      {mode === 'workspace' ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <button
+            type="button"
+            onClick={() => navigate('/workplace')}
+            className="rounded-2xl border border-white/10 bg-zinc-900/45 p-4 text-left transition-all hover:border-cyan-300/30 hover:shadow-[0_0_22px_rgba(34,211,238,0.12)]"
+          >
+            <p className="text-xs uppercase tracking-wide text-cyan-200">Workspace</p>
+            <p className="mt-1 text-lg font-semibold text-white">Ticket Operations</p>
+            <p className="mt-2 text-sm text-slate-300">Open the focused ticket dashboard with quick links and AI analysis actions.</p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate('/tasks')}
+            className="rounded-2xl border border-white/10 bg-zinc-900/45 p-4 text-left transition-all hover:border-cyan-300/30 hover:shadow-[0_0_22px_rgba(34,211,238,0.12)]"
+          >
+            <p className="text-xs uppercase tracking-wide text-cyan-200">Tasks</p>
+            <p className="mt-1 text-lg font-semibold text-white">Execution Queue</p>
+            <p className="mt-2 text-sm text-slate-300">Review active tasks, prioritize blockers, and clear overdue work quickly.</p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate('/projects')}
+            className="rounded-2xl border border-white/10 bg-zinc-900/45 p-4 text-left transition-all hover:border-cyan-300/30 hover:shadow-[0_0_22px_rgba(34,211,238,0.12)]"
+          >
+            <p className="text-xs uppercase tracking-wide text-cyan-200">Projects</p>
+            <p className="mt-1 text-lg font-semibold text-white">Delivery Board</p>
+            <p className="mt-2 text-sm text-slate-300">Track milestones, unblock stalled workstreams, and update status in one place.</p>
+          </button>
+        </div>
+      ) : null}
+
+      {mode === 'homelab' ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {HOMELAB_SERVICES.map((service) => (
+            <button
+              key={service.id}
+              type="button"
+              onClick={() => navigate(service.url)}
+              className="rounded-2xl border border-white/10 bg-zinc-900/45 p-4 text-left transition-all hover:border-emerald-300/30 hover:shadow-[0_0_22px_rgba(16,185,129,0.14)]"
+            >
+              <div className="inline-flex items-center gap-2">
+                <Server className="h-4 w-4 text-emerald-300" />
+                <p className="text-base font-semibold text-white">{service.name}</p>
+              </div>
+              <p className={`mt-2 inline-flex rounded-full px-2 py-1 text-[11px] uppercase tracking-wide ${service.status === 'online' ? 'bg-emerald-500/20 text-emerald-200' : 'bg-rose-500/20 text-rose-200'}`}>
+                {service.status}
+              </p>
+              <p className="mt-3 text-sm text-slate-300">Open service controls and run quick homelab actions.</p>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {mode === 'tools' ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <button
+            type="button"
+            onClick={() => navigate('/tools')}
+            className="rounded-2xl border border-white/10 bg-zinc-900/45 p-4 text-left transition-all hover:border-cyan-300/30 hover:shadow-[0_0_22px_rgba(34,211,238,0.12)]"
+          >
+            <div className="inline-flex items-center gap-2">
+              <Wrench className="h-4 w-4 text-cyan-300" />
+              <p className="text-base font-semibold text-white">Tool Modules</p>
+            </div>
+            <p className="mt-3 text-sm text-slate-300">Open utility modules sorted by usage and add new tools.</p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate('/tools')}
+            className="rounded-2xl border border-white/10 bg-zinc-900/45 p-4 text-left transition-all hover:border-cyan-300/30 hover:shadow-[0_0_22px_rgba(34,211,238,0.12)]"
+          >
+            <div className="inline-flex items-center gap-2">
+              <Activity className="h-4 w-4 text-cyan-300" />
+              <p className="text-base font-semibold text-white">API / Dev Tools</p>
+            </div>
+            <p className="mt-3 text-sm text-slate-300">Jump to API modules for endpoint checks and quick operational calls.</p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate('/tools')}
+            className="rounded-2xl border border-white/10 bg-zinc-900/45 p-4 text-left transition-all hover:border-cyan-300/30 hover:shadow-[0_0_22px_rgba(34,211,238,0.12)]"
+          >
+            <div className="inline-flex items-center gap-2">
+              <TerminalSquare className="h-4 w-4 text-cyan-300" />
+              <p className="text-base font-semibold text-white">Quick Actions</p>
+            </div>
+            <p className="mt-3 text-sm text-slate-300">Run shortcuts and automation actions from one mobile-friendly panel.</p>
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

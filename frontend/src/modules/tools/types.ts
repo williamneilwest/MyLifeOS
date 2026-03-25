@@ -45,7 +45,6 @@ export interface ApiModuleConfig {
 
 export interface ToolModule {
   id: string;
-  user_id: string;
   name: string;
   type: ToolModuleType;
   config: Record<string, unknown>;

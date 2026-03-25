@@ -153,10 +153,31 @@ def _ensure_flow_runs_user_id() -> None:
     db.session.commit()
 
 
-def _ensure_user_tools_table() -> None:
+def _ensure_tool_modules_table() -> None:
     from .models import UserTool
 
+    inspector = inspect(db.engine)
+    existing_tables = set(inspector.get_table_names())
+
+    # Fresh create for the canonical table name.
     UserTool.__table__.create(bind=db.engine, checkfirst=True)
+
+    # One-time migration from legacy `user_tools` to `tool_modules`.
+    current_tables = set(inspect(db.engine).get_table_names())
+    if 'user_tools' in existing_tables and 'tool_modules' in current_tables:
+        db.session.execute(
+            text(
+                """
+                INSERT INTO tool_modules (id, name, type, config_json, created_at, updated_at)
+                SELECT u.id, u.name, u.type, u.config_json, u.created_at, u.updated_at
+                FROM user_tools u
+                LEFT JOIN tool_modules t ON t.id = u.id
+                WHERE t.id IS NULL
+                """
+            )
+        )
+        db.session.execute(text("DROP TABLE IF EXISTS user_tools"))
+        db.session.commit()
 
 
 def create_app(config_class: type[Config] = Config) -> Flask:
@@ -221,7 +242,7 @@ def create_app(config_class: type[Config] = Config) -> Flask:
             _ensure_quick_links_table()
             _ensure_scripts_table()
             _ensure_flow_runs_user_id()
-            _ensure_user_tools_table()
+            _ensure_tool_modules_table()
 
             _ensure_projects_description_column()
 

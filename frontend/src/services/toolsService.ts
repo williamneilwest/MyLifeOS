@@ -19,14 +19,14 @@ export interface ToolsFetchResponse {
 export const toolsService = {
   getAll: () => apiClient.get<ToolsPayload>('/tools/'),
   createLink: (data: ToolLink) => apiClient.post<ToolLink>('/tools/', data),
-  getModules: () => apiClient.get<ToolModulesPayload>('/tools/modules'),
+  getModules: () => apiClient.get<ToolModulesPayload>('/tool-modules'),
   createTool: (payload: { name: string; type: string; config?: Record<string, unknown> }) =>
-    apiClient.post<ToolModule>('/tools/modules', payload),
+    apiClient.post<ToolModule>('/tool-modules', payload),
   createModule: (payload: { name: string; type: string; config?: Record<string, unknown> }) =>
-    apiClient.post<ToolModule>('/tools/modules', payload),
+    apiClient.post<ToolModule>('/tool-modules', payload),
   updateModule: (id: string, payload: { name?: string; type?: string; config?: Record<string, unknown> }) =>
-    apiClient.put<ToolModule>(`/tools/modules/${id}`, payload),
-  deleteModule: (id: string) => apiClient.delete(`/tools/modules/${id}`),
+    apiClient.put<ToolModule>(`/tool-modules/${id}`, payload),
+  deleteModule: (id: string) => apiClient.delete(`/tool-modules/${id}`),
   fetchProxy: (url: string, method: 'GET' | 'POST' = 'GET', body?: Record<string, unknown>) => {
     void body;
     const query = new URLSearchParams({ url, method });
