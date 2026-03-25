@@ -34,7 +34,7 @@ interface AppStore {
   removeTool: (toolId: string) => void;
 }
 
-export const defaultActiveModules: ModuleId[] = ['workplace', 'dashboard', 'tools'];
+export const defaultActiveModules: ModuleId[] = ['workplace', 'dashboard', 'tools', 'database'];
 
 export const useAppStore = create<AppStore>()(
   persist(
@@ -100,6 +100,10 @@ export const useAppStore = create<AppStore>()(
       version: 1,
       migrate: (persistedState) => {
         const state = persistedState as Partial<AppStore> | undefined;
+        const activeModules = Array.isArray(state?.activeModules) ? state.activeModules : defaultActiveModules;
+        const normalizedActiveModules = activeModules.includes('database')
+          ? activeModules
+          : [...activeModules, 'database'];
         return {
           ...state,
           tools: Array.isArray(state?.tools) ? state.tools : [],
@@ -108,13 +112,12 @@ export const useAppStore = create<AppStore>()(
             sidebarCollapsed: false,
             hideMobileTabs: false,
           },
-          activeModules: Array.isArray(state?.activeModules) ? state.activeModules : defaultActiveModules,
+          activeModules: normalizedActiveModules,
         } as AppStore;
       },
       partialize: (state) => ({
         preferences: state.preferences,
         activeModules: state.activeModules,
-        tools: state.tools,
       }),
     },
   ),

@@ -15,7 +15,7 @@ import { workplaceModule } from '../modules/workplace';
 import type { ModuleId } from '../store/useAppStore';
 
 const allModules = [dashboardModule, servicesModule, workplaceModule, scriptsModule, aiBuilderModule, financeModule, projectsModule, homelabModule, tasksModule, planningModule, toolsModule, databaseModule];
-const primaryNavIds = new Set(['workplace', 'dashboard', 'tools']);
+const primaryNavIds = new Set(['workplace', 'dashboard', 'tools', 'database']);
 
 export const lifeOsModules = allModules;
 

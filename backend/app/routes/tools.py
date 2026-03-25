@@ -1,17 +1,18 @@
 import json
-from urllib.error import HTTPError, URLError
+import urllib.parse
+
+from flask import Blueprint, current_app, jsonify, request, session
+import requests
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
 
-from flask import Blueprint, current_app, request
-
-from ..auth import auth_required, get_current_user
+from ..auth import get_current_user
 from ..api_response import error_response, success_response
 from ..db import db
 from ..models import CommandSnippet, ToolLink, UserTool
 
 
 tools_bp = Blueprint('tools', __name__)
+TOOLS_FALLBACK_USER_ID = 'local-tools-user'
 
 
 def _is_supported_fetch_url(raw_url: str) -> bool:
@@ -22,6 +23,15 @@ def _is_supported_fetch_url(raw_url: str) -> bool:
     return parsed.scheme in {'http', 'https'} and bool(parsed.netloc)
 
 
+def _resolve_tools_user_id() -> str:
+    try:
+        user = get_current_user()
+        return user.id
+    except Exception:
+        fallback = str(session.get('user_id') or '').strip()
+        return fallback or TOOLS_FALLBACK_USER_ID
+
+
 @tools_bp.get('/tools/', strict_slashes=False)
 def get_tools_data():
     current_app.logger.info('[DB] Fetching table: tool_links')
@@ -29,9 +39,13 @@ def get_tools_data():
     current_app.logger.info('[DB] Fetching table: command_snippets')
     snippets = CommandSnippet.query.order_by(CommandSnippet.created_at.desc()).all()
 
+    user_id = _resolve_tools_user_id()
+    modules = UserTool.query.filter_by(user_id=user_id).order_by(UserTool.updated_at.desc()).all()
+
     return success_response({
         'links': [link.to_dict() for link in links],
         'snippets': [snippet.to_dict() for snippet in snippets],
+        'modules': [module.to_dict() for module in modules],
     })
 
 
@@ -49,11 +63,7 @@ def create_tool_link():
             return error_response('name is required', 400)
         if not tool_type:
             return error_response('type is required', 400)
-        try:
-            user = get_current_user()
-        except RuntimeError:
-            return error_response('Authentication required', 401)
-        module = UserTool(user_id=user.id, name=name, type=tool_type, config_json=json.dumps(config))
+        module = UserTool(user_id=_resolve_tools_user_id(), name=name, type=tool_type, config_json=json.dumps(config))
         db.session.add(module)
         db.session.commit()
         current_app.logger.info('[TOOLS] created module (compat route) id=%s type=%s', module.id, module.type)
@@ -77,58 +87,48 @@ def create_tool_link():
     return success_response(link.to_dict(), 201)
 
 
-@tools_bp.route('/tools/fetch', methods=['GET', 'POST'], strict_slashes=False)
-@auth_required
+@tools_bp.route('/tools/fetch', methods=['GET'], strict_slashes=False)
+@tools_bp.route('/fetch', methods=['GET'], strict_slashes=False)
 def proxy_fetch():
-    method = str(request.args.get('method') or request.form.get('method') or 'GET').upper()
-    if method not in {'GET', 'POST'}:
-        return error_response('method must be GET or POST', 400)
-
-    url = str(request.args.get('url') or request.form.get('url') or '').strip()
-    if not url:
-        return error_response('Missing URL', 400)
-    if not _is_supported_fetch_url(url):
-        return error_response('URL must be a valid http/https endpoint', 400)
-
     try:
-        request_body = request.get_json(silent=True)
-        payload_bytes = None
-        if method == 'POST' and isinstance(request_body, dict):
-            payload_bytes = json.dumps(request_body).encode('utf-8')
+        raw_url = request.args.get('url')
+        method = str(request.args.get('method') or 'GET').upper()
 
-        outbound = Request(
-            url=url,
-            method=method,
-            data=payload_bytes,
-            headers={
-                'Accept': 'application/json, text/plain;q=0.9, */*;q=0.8',
-                'Content-Type': 'application/json',
-                'User-Agent': 'myLifeOS-tools-proxy/1.0',
-            },
-        )
+        if not raw_url:
+            return jsonify({'error': 'Missing URL'}), 400
 
-        with urlopen(outbound, timeout=10) as response:
-            status = response.getcode()
-            content_type = response.headers.get('Content-Type', '')
-            raw_text = response.read().decode('utf-8', errors='replace')
+        url = urllib.parse.unquote(raw_url)
+        if not _is_supported_fetch_url(url):
+            return jsonify({'error': 'URL must be a valid http/https endpoint'}), 400
 
-            if 'application/json' in content_type.lower():
-                try:
-                    data = json.loads(raw_text)
-                except Exception:
-                    data = raw_text
-            else:
-                data = raw_text
+        current_app.logger.info('[TOOLS] Fetching upstream url=%s method=%s', url, method)
 
-            return success_response({'status': status, 'data': data, 'contentType': content_type})
-    except HTTPError as error:
-        body = error.read().decode('utf-8', errors='replace') if hasattr(error, 'read') else str(error)
-        return error_response(f'Upstream HTTP {error.code}: {body[:500]}', 502)
-    except URLError as error:
-        return error_response(f'Upstream request failed: {error}', 502)
+        headers = {'User-Agent': 'LifeOS-API-Tester'}
+        if method == 'POST':
+            res = requests.post(url, headers=headers, timeout=10)
+        else:
+            res = requests.get(url, headers=headers, timeout=10)
+
+        content_type = res.headers.get('Content-Type', '')
+        if 'application/json' in content_type.lower():
+            try:
+                data = res.json()
+            except Exception:
+                data = res.text
+        else:
+            data = res.text
+
+        return jsonify({
+            'status': res.status_code,
+            'contentType': content_type,
+            'data': data,
+        })
     except Exception as error:  # noqa: BLE001
         current_app.logger.exception('[TOOLS] proxy_fetch failed: %s', error)
-        return error_response(str(error), 500)
+        return jsonify({
+            'error': str(error),
+            'message': 'Proxy fetch failed',
+        }), 500
 
 
 def _ensure_default_user_tools(user_id: str) -> None:
@@ -153,18 +153,16 @@ def _ensure_default_user_tools(user_id: str) -> None:
 
 
 @tools_bp.get('/tools/modules', strict_slashes=False)
-@auth_required
 def list_user_tools():
-    user = get_current_user()
-    _ensure_default_user_tools(user.id)
-    modules = UserTool.query.filter_by(user_id=user.id).order_by(UserTool.updated_at.desc()).all()
+    user_id = _resolve_tools_user_id()
+    _ensure_default_user_tools(user_id)
+    modules = UserTool.query.filter_by(user_id=user_id).order_by(UserTool.updated_at.desc()).all()
     return success_response({'modules': [module.to_dict() for module in modules]})
 
 
 @tools_bp.post('/tools/modules', strict_slashes=False)
-@auth_required
 def create_user_tool():
-    user = get_current_user()
+    user_id = _resolve_tools_user_id()
     payload = request.get_json(silent=True) or {}
     current_app.logger.info('[TOOLS] create module payload=%s', payload)
     name = str(payload.get('name') or '').strip()
@@ -174,7 +172,7 @@ def create_user_tool():
         return error_response('name is required', 400)
     if not tool_type:
         return error_response('type is required', 400)
-    module = UserTool(user_id=user.id, name=name, type=tool_type, config_json=json.dumps(config))
+    module = UserTool(user_id=user_id, name=name, type=tool_type, config_json=json.dumps(config))
     db.session.add(module)
     db.session.commit()
     current_app.logger.info('[TOOLS] created module id=%s type=%s', module.id, module.type)
@@ -182,10 +180,9 @@ def create_user_tool():
 
 
 @tools_bp.put('/tools/modules/<string:module_id>', strict_slashes=False)
-@auth_required
 def update_user_tool(module_id: str):
-    user = get_current_user()
-    module = UserTool.query.filter_by(id=module_id, user_id=user.id).first_or_404()
+    user_id = _resolve_tools_user_id()
+    module = UserTool.query.filter_by(id=module_id, user_id=user_id).first_or_404()
     payload = request.get_json(silent=True) or {}
     if 'name' in payload:
         name = str(payload.get('name') or '').strip()
@@ -204,10 +201,9 @@ def update_user_tool(module_id: str):
 
 
 @tools_bp.delete('/tools/modules/<string:module_id>', strict_slashes=False)
-@auth_required
 def delete_user_tool(module_id: str):
-    user = get_current_user()
-    module = UserTool.query.filter_by(id=module_id, user_id=user.id).first_or_404()
+    user_id = _resolve_tools_user_id()
+    module = UserTool.query.filter_by(id=module_id, user_id=user_id).first_or_404()
     db.session.delete(module)
     db.session.commit()
     return success_response({'deleted': True, 'id': module_id})

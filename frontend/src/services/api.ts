@@ -105,6 +105,17 @@ export function getDatabaseTables() {
 }
 
 export function getDatabaseTableData(tableName: string) {
-  console.log('Fetching table data...');
-  return apiClient.get<Record<string, unknown>[]>(`/db/table/${encodeURIComponent(tableName)}`);
+  return apiClient.get<Record<string, unknown>[]>(`/db/${encodeURIComponent(tableName)}`);
+}
+
+export function createDatabaseRecord(tableName: string, payload: Record<string, unknown>) {
+  return apiClient.post<Record<string, unknown>>(`/db/${encodeURIComponent(tableName)}`, payload);
+}
+
+export function updateDatabaseRecord(tableName: string, recordId: string, payload: Record<string, unknown>) {
+  return apiClient.put<Record<string, unknown>>(`/db/${encodeURIComponent(tableName)}/${encodeURIComponent(recordId)}`, payload);
+}
+
+export function deleteDatabaseRecord(tableName: string, recordId: string) {
+  return apiClient.delete(`/db/${encodeURIComponent(tableName)}/${encodeURIComponent(recordId)}`);
 }

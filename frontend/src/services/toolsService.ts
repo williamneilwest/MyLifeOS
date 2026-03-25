@@ -28,10 +28,8 @@ export const toolsService = {
     apiClient.put<ToolModule>(`/tools/modules/${id}`, payload),
   deleteModule: (id: string) => apiClient.delete(`/tools/modules/${id}`),
   fetchProxy: (url: string, method: 'GET' | 'POST' = 'GET', body?: Record<string, unknown>) => {
+    void body;
     const query = new URLSearchParams({ url, method });
-    if (method === 'POST') {
-      return apiClient.post<ToolsFetchResponse>(`/tools/fetch?${query.toString()}`, body || {});
-    }
     return apiClient.get<ToolsFetchResponse>(`/tools/fetch?${query.toString()}`);
   },
 };

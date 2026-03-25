@@ -2,7 +2,7 @@ import { createElement, lazy, Suspense } from 'react';
 import { Database } from 'lucide-react';
 import type { LifeOsModule } from '../../routes/moduleTypes';
 
-const DatabaseViewerPage = lazy(() => import('../../pages/DatabaseViewer').then((module) => ({ default: module.DatabaseViewer })));
+const DatabasePage = lazy(() => import('./pages/DatabasePage').then((module) => ({ default: module.DatabasePage })));
 
 export const databaseModule: LifeOsModule = {
   id: 'database',
@@ -17,10 +17,9 @@ export const databaseModule: LifeOsModule = {
       path: 'database',
       element: createElement(
         Suspense,
-        { fallback: createElement('div', { className: 'text-sm text-slate-400' }, 'Loading database viewer...') },
-        createElement(DatabaseViewerPage),
+        { fallback: createElement('div', { className: 'text-sm text-slate-400' }, 'Loading database manager...') },
+        createElement(DatabasePage),
       ),
     },
   ],
 };
-
