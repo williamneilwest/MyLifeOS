@@ -2,6 +2,7 @@ import { Bot, RefreshCcw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Card } from '../../../../components/ui';
+import { TicketFilters } from './TicketFilters';
 import { TicketDetailsModal } from './TicketDetailsModal';
 
 type TicketValue = string | number | boolean | null | undefined;
@@ -58,7 +59,11 @@ export function TicketDashboard({ refreshSignal = 0 }: TicketDashboardProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [assigneeFilter, setAssigneeFilter] = useState('all');
+  const [priorityFilter, setPriorityFilter] = useState('');
+  const [staleOnly, setStaleOnly] = useState(false);
+  const [urgentOnly, setUrgentOnly] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
 
@@ -104,11 +109,23 @@ export function TicketDashboard({ refreshSignal = 0 }: TicketDashboardProps) {
     return Array.from(new Set(tickets.map((t) => text(t.assignee)).filter(Boolean))).sort((a, b) => a.localeCompare(b));
   }, [tickets]);
 
+  const statuses = useMemo(() => {
+    return Array.from(new Set(tickets.map((t) => text(t.status || t.state)).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  }, [tickets]);
+
+  const priorities = useMemo(() => {
+    return Array.from(new Set(tickets.map((t) => text(t.priority)).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  }, [tickets]);
+
   const filteredTickets = useMemo(() => {
     const search = query.trim().toLowerCase();
 
     return tickets.filter((ticket) => {
+      if (statusFilter && text(ticket.status || ticket.state) !== statusFilter) return false;
       if (assigneeFilter !== 'all' && text(ticket.assignee) !== assigneeFilter) return false;
+      if (priorityFilter && text(ticket.priority) !== priorityFilter) return false;
+      if (staleOnly && !Boolean(ticket.is_stale)) return false;
+      if (urgentOnly && !Boolean(ticket.is_urgent)) return false;
 
       if (!search) return true;
       const ticketNumber = text(ticket.ticket_number || ticket.number).toLowerCase();
@@ -116,7 +133,7 @@ export function TicketDashboard({ refreshSignal = 0 }: TicketDashboardProps) {
       const assignee = text(ticket.assignee).toLowerCase();
       return ticketNumber.includes(search) || title.includes(search) || assignee.includes(search);
     });
-  }, [tickets, query, assigneeFilter]);
+  }, [tickets, query, statusFilter, assigneeFilter, priorityFilter, staleOnly, urgentOnly]);
 
   const safeSelectedIndex = selectedIndex === null ? -1 : selectedIndex;
 
@@ -176,26 +193,24 @@ export function TicketDashboard({ refreshSignal = 0 }: TicketDashboardProps) {
           </div>
         </div>
 
-        <div className="mb-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search by ticket #, title, assignee"
-            className="w-full rounded-2xl border border-white/10 bg-zinc-900/70 px-3 py-2 text-base text-white outline-none transition focus:border-cyan-300/40"
+        <div className="mb-2 overflow-visible">
+          <TicketFilters
+            search={query}
+            status={statusFilter}
+            assignee={assigneeFilter === 'all' ? '' : assigneeFilter}
+            priority={priorityFilter}
+            staleOnly={staleOnly}
+            urgentOnly={urgentOnly}
+            statuses={statuses}
+            assignees={assignees}
+            priorities={priorities}
+            onSearch={setQuery}
+            onStatus={setStatusFilter}
+            onAssignee={(value) => setAssigneeFilter(value || 'all')}
+            onPriority={setPriorityFilter}
+            onStaleOnly={setStaleOnly}
+            onUrgentOnly={setUrgentOnly}
           />
-
-          <select
-            value={assigneeFilter}
-            onChange={(event) => setAssigneeFilter(event.target.value)}
-            className="w-full rounded-2xl border border-white/10 bg-zinc-900/70 px-3 py-2 text-base text-white outline-none transition focus:border-cyan-300/40"
-          >
-            <option value="all">All Assignees</option>
-            {assignees.map((assignee) => (
-              <option key={assignee} value={assignee}>
-                {assignee}
-              </option>
-            ))}
-          </select>
         </div>
 
         <div className="mb-2 text-[11px] text-slate-500">

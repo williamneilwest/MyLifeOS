@@ -3,14 +3,20 @@ import { apiClient } from './apiClient';
 export interface AuthUser {
   id: string;
   username: string;
-  created_at: string | null;
+  created_at?: string | null;
+}
+
+interface AuthPayload {
+  user: AuthUser;
 }
 
 export const authService = {
-  me: () => apiClient.get<{ user: AuthUser }>('/auth/me'),
+  me: () => apiClient.get<AuthPayload>('/auth/me'),
   login: (username: string, password: string) =>
-    apiClient.post<{ user: AuthUser }>('/auth/login', { username, password }),
+    apiClient.post<AuthPayload>('/auth/login', { username, password }),
   register: (username: string, password: string) =>
-    apiClient.post<{ user: AuthUser }>('/auth/register', { username, password }),
-  logout: () => apiClient.post<{ logged_out: boolean }>('/auth/logout', {}),
+    apiClient.post<AuthPayload>('/auth/register', { username, password }),
+  logout: async () => {
+    await apiClient.post('/auth/logout', {});
+  },
 };

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { authService } from '../services/authService';
+import { useAuthStore } from '../store/useAuthStore';
 
 interface AuthGateProps {
   children: ReactNode;
@@ -9,6 +10,8 @@ interface AuthGateProps {
 
 export function AuthGate({ children }: AuthGateProps) {
   const queryClient = useQueryClient();
+  const setAuthUser = useAuthStore((state) => state.setUser);
+  const setAuthChecked = useAuthStore((state) => state.setChecked);
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -33,27 +36,29 @@ export function AuthGate({ children }: AuthGateProps) {
     },
   });
 
+  useEffect(() => {
+    if (meQuery.isLoading) {
+      return;
+    }
+
+    if (meQuery.data?.user) {
+      setAuthUser(meQuery.data.user);
+      setAuthChecked(true);
+      return;
+    }
+
+    if (meQuery.isError) {
+      setAuthUser(null);
+      setAuthChecked(true);
+    }
+  }, [meQuery.data, meQuery.isError, meQuery.isLoading, setAuthChecked, setAuthUser]);
+
   if (meQuery.isLoading) {
     return <div className="min-h-screen bg-zinc-950 px-6 py-10 text-sm text-slate-400">Checking session...</div>;
   }
 
   if (meQuery.data?.user) {
-    return (
-      <div className="min-h-screen">
-        <div className="fixed right-4 top-3 z-50 text-xs text-slate-300">
-          <button
-            className="rounded border border-white/10 bg-zinc-900/80 px-2 py-1 hover:text-white"
-            onClick={async () => {
-              await authService.logout();
-              await queryClient.invalidateQueries({ queryKey: ['auth-me'] });
-            }}
-          >
-            Logout {meQuery.data.user.username}
-          </button>
-        </div>
-        {children}
-      </div>
-    );
+    return <>{children}</>;
   }
 
   const pending = loginMutation.isPending || registerMutation.isPending;

@@ -34,7 +34,7 @@ interface AppStore {
   removeTool: (toolId: string) => void;
 }
 
-export const defaultActiveModules: ModuleId[] = ['workplace', 'dashboard', 'tools', 'database'];
+export const defaultActiveModules: ModuleId[] = ['workplace', 'dashboard', 'finance', 'tools', 'database'];
 
 export const useAppStore = create<AppStore>()(
   persist(
@@ -97,13 +97,17 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: 'life-os-app-store',
-      version: 1,
+      version: 2,
       migrate: (persistedState) => {
         const state = persistedState as Partial<AppStore> | undefined;
         const activeModules = Array.isArray(state?.activeModules) ? state.activeModules : defaultActiveModules;
-        const normalizedActiveModules = activeModules.includes('database')
-          ? activeModules
-          : [...activeModules, 'database'];
+        const normalizedActiveModules = [
+          ...new Set([
+            ...activeModules,
+            'finance',
+            'database',
+          ]),
+        ] as ModuleId[];
         return {
           ...state,
           tools: Array.isArray(state?.tools) ? state.tools : [],

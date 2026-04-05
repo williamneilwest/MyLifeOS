@@ -16,6 +16,7 @@ F = TypeVar('F', bound=Callable[..., object])
 DISABLE_AUTH_FOR_POSTS = os.getenv('DISABLE_AUTH_FOR_POSTS', 'true').strip().lower() in {'1', 'true', 'yes', 'on'}
 AUTOMATION_USERNAME = os.getenv('AUTOMATION_USERNAME', 'power-automate')
 AUTOMATION_PASSWORD = os.getenv('AUTOMATION_PASSWORD', 'temporary-dev-password')
+FINANCE_OWNER_USERNAME = os.getenv('FINANCE_OWNER_USERNAME', 'will').strip().lower()
 
 
 def _resolve_user_from_session() -> User | None:
@@ -64,6 +65,22 @@ def get_current_user() -> User:
         raise RuntimeError('No authenticated user in request context')
     g.current_user = resolved
     return resolved
+
+
+def finance_owner_required(handler: F) -> F:
+    @wraps(handler)
+    def wrapped(*args, **kwargs):
+        user = _resolve_user_from_session()
+        if not user:
+            return error_response('Authentication required', 401)
+
+        if user.username.strip().lower() != FINANCE_OWNER_USERNAME:
+            return error_response('Finance access is restricted', 403)
+
+        g.current_user = user
+        return handler(*args, **kwargs)
+
+    return wrapped  # type: ignore[return-value]
 
 
 def is_auth_route() -> bool:

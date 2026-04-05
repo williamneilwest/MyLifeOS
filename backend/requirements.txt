@@ -6,3 +6,5 @@ psycopg2-binary
 pandas
 openpyxl
 requests
+plaid-python
+python-dotenv
