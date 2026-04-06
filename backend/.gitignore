@@ -7,3 +7,4 @@ __pycache__/
 lifeos.db
 .env
 .env
+backend/flow_outputs/
