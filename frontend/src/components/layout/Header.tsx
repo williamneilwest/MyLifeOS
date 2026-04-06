@@ -91,7 +91,7 @@ export function Header({ onMenuClick }: HeaderProps) {
         <button
           type="button"
           onClick={toggleTheme}
-          className="inline-flex h-10 items-center justify-center rounded-xl border border-white/10 bg-zinc-900/60 px-3 text-zinc-300 transition-all duration-200 hover:border-emerald-400/30 hover:text-white"
+          className="inline-flex h-10 min-w-fit items-center justify-center whitespace-nowrap rounded-xl border border-white/10 bg-zinc-900/60 px-2.5 text-xs font-medium leading-none text-zinc-300 transition-all duration-200 hover:border-emerald-400/30 hover:text-white sm:px-3 sm:text-sm"
           aria-label="Toggle theme"
         >
           {theme === 'dark' ? <SunMedium className="h-4 w-4" /> : <MoonStar className="h-4 w-4" />}
@@ -100,7 +100,7 @@ export function Header({ onMenuClick }: HeaderProps) {
         <button
           type="button"
           onClick={() => navigate('/settings')}
-          className="inline-flex h-10 items-center justify-center rounded-xl border border-white/10 bg-zinc-900/60 px-3 text-zinc-300 transition-all duration-200 hover:border-emerald-400/30 hover:text-white"
+          className="inline-flex h-10 min-w-fit items-center justify-center whitespace-nowrap rounded-xl border border-white/10 bg-zinc-900/60 px-2.5 text-xs font-medium leading-none text-zinc-300 transition-all duration-200 hover:border-emerald-400/30 hover:text-white sm:px-3 sm:text-sm"
           aria-label="Open settings"
         >
           <Settings2 className="h-4 w-4" />
@@ -124,7 +124,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                 void queryClient.invalidateQueries({ queryKey: ['auth-me'] });
               });
             }}
-            className="inline-flex h-10 items-center justify-center rounded-xl border border-white/10 bg-zinc-900/60 px-3 text-zinc-300 transition-all duration-200 hover:border-emerald-400/30 hover:text-white"
+            className="inline-flex h-10 min-w-fit items-center justify-center whitespace-nowrap rounded-xl border border-white/10 bg-zinc-900/60 px-2.5 text-xs font-medium leading-none text-zinc-300 transition-all duration-200 hover:border-emerald-400/30 hover:text-white sm:px-3 sm:text-sm"
           >
             Sign Out
           </button>

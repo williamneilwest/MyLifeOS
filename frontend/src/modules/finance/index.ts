@@ -1,12 +1,20 @@
-import { createElement, lazy, Suspense } from 'react';
+import { createElement, lazy, Suspense, type ComponentType } from 'react';
 import { Wallet } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import type { LifeOsModule } from '../../routes/moduleTypes';
 import { FINANCE_OWNER_USERNAME, useAuthStore } from '../../store/useAuthStore';
 
 const FinancePage = lazy(() => import('./pages/FinancePage').then((module) => ({ default: module.FinancePage })));
+const IncomePage = lazy(() => import('./pages/IncomePage').then((module) => ({ default: module.IncomePage })));
+const ExpensesPage = lazy(() => import('./pages/ExpensesPage').then((module) => ({ default: module.ExpensesPage })));
+const SavingsPage = lazy(() => import('./pages/SavingsPage').then((module) => ({ default: module.SavingsPage })));
+const DebtPage = lazy(() => import('./pages/DebtPage').then((module) => ({ default: module.DebtPage })));
 
-function FinanceAccessGate() {
+interface FinanceAccessGateProps {
+  component: ComponentType;
+}
+
+function FinanceAccessGate({ component: Component }: FinanceAccessGateProps) {
   const checked = useAuthStore((state) => state.checked);
   const user = useAuthStore((state) => state.user);
 
@@ -19,7 +27,15 @@ function FinanceAccessGate() {
     return createElement(Navigate, { to: '/', replace: true });
   }
 
-  return createElement(FinancePage);
+  return createElement(Component);
+}
+
+function protectedElement(component: ComponentType, fallbackLabel: string) {
+  return createElement(
+    Suspense,
+    { fallback: createElement('div', { className: 'text-sm text-slate-400' }, fallbackLabel) },
+    createElement(FinanceAccessGate, { component }),
+  );
 }
 
 export const financeModule: LifeOsModule = {
@@ -33,11 +49,23 @@ export const financeModule: LifeOsModule = {
   routes: [
     {
       path: 'finance',
-      element: createElement(
-        Suspense,
-        { fallback: createElement('div', { className: 'text-sm text-slate-400' }, 'Loading finance...') },
-        createElement(FinanceAccessGate),
-      ),
+      element: protectedElement(FinancePage, 'Loading finance...'),
+    },
+    {
+      path: 'finance/income',
+      element: protectedElement(IncomePage, 'Loading income dashboard...'),
+    },
+    {
+      path: 'finance/expenses',
+      element: protectedElement(ExpensesPage, 'Loading expense dashboard...'),
+    },
+    {
+      path: 'finance/savings',
+      element: protectedElement(SavingsPage, 'Loading savings dashboard...'),
+    },
+    {
+      path: 'finance/debt',
+      element: protectedElement(DebtPage, 'Loading debt dashboard...'),
     },
   ],
 };
