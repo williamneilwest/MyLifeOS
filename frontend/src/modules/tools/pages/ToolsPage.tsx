@@ -54,7 +54,47 @@ function normalizeApiConfig(config: Record<string, unknown>): ApiModuleConfig {
   };
 }
 
-function QrToolModule({ module, onSaveConfig }: { module: ToolModule; onSaveConfig: (module: ToolModule, config: Record<string, unknown>) => Promise<void> }) {
+function getUsageCount(module: ToolModule): number {
+  const config = asObject(module.config);
+  const usageCount = Number(config.usage_count || 0);
+  return Number.isFinite(usageCount) && usageCount > 0 ? usageCount : 0;
+}
+
+function getLastUsedTimestamp(module: ToolModule): number {
+  const config = asObject(module.config);
+  const lastUsedRaw = String(config.last_used_at || '');
+  const parsed = Date.parse(lastUsedRaw);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+type ToolCategory = 'all' | 'most-used' | 'utilities' | 'api-dev' | 'quick-actions';
+
+const CATEGORY_TABS: Array<{ id: ToolCategory; label: string }> = [
+  { id: 'all', label: 'All' },
+  { id: 'most-used', label: 'Most Used' },
+  { id: 'utilities', label: 'Utilities' },
+  { id: 'api-dev', label: 'API / Dev' },
+  { id: 'quick-actions', label: 'Quick Actions' },
+];
+
+function matchesCategory(module: ToolModule, category: ToolCategory): boolean {
+  if (category === 'all') return true;
+  if (category === 'most-used') return getUsageCount(module) > 0;
+  if (category === 'utilities') return module.type === 'qr' || module.type === 'shortcut' || module.type === 'api';
+  if (category === 'api-dev') return module.type === 'api' || module.type === 'api_tester';
+  if (category === 'quick-actions') return module.type === 'shortcut';
+  return true;
+}
+
+function QrToolModule({
+  module,
+  onSaveConfig,
+  onUse,
+}: {
+  module: ToolModule;
+  onSaveConfig: (module: ToolModule, config: Record<string, unknown>) => Promise<void>;
+  onUse: (module: ToolModule) => Promise<void>;
+}) {
   const config = normalizeQrConfig(module.config);
   const [text, setText] = useState(config.defaultText || '');
   const [savingError, setSavingError] = useState<string | null>(null);
@@ -116,10 +156,19 @@ function QrToolModule({ module, onSaveConfig }: { module: ToolModule; onSaveConf
           <img src={qrUrl} alt="Generated QR code" className="h-52 w-52 rounded-lg bg-white p-2" />
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => navigator.clipboard.writeText(text)}>Copy Text</Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              void navigator.clipboard.writeText(text);
+              void onUse(module);
+            }}
+          >
+            Copy Text
+          </Button>
           <a
             href={qrUrl}
             download="qr-code.png"
+            onClick={() => void onUse(module)}
             className="inline-flex items-center rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-200 hover:bg-white/5"
           >
             Download QR
@@ -137,7 +186,15 @@ function QrToolModule({ module, onSaveConfig }: { module: ToolModule; onSaveConf
                 <p className="truncate text-sm text-slate-200">{entry.text}</p>
                 <p className="mt-1 text-[11px] text-slate-500">{new Date(entry.createdAt).toLocaleString()}</p>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <Button variant="ghost" onClick={() => setText(entry.text)}>Load</Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setText(entry.text);
+                      void onUse(module);
+                    }}
+                  >
+                    Load
+                  </Button>
                 </div>
               </div>
             ))}
@@ -148,7 +205,7 @@ function QrToolModule({ module, onSaveConfig }: { module: ToolModule; onSaveConf
   );
 }
 
-function ShortcutToolModule({ module }: { module: ToolModule }) {
+function ShortcutToolModule({ module, onUse }: { module: ToolModule; onUse: (module: ToolModule) => Promise<void> }) {
   const config = normalizeShortcutConfig(module.config, module.name);
   const [posting, setPosting] = useState(false);
   const [postResult, setPostResult] = useState<string | null>(null);
@@ -163,6 +220,7 @@ function ShortcutToolModule({ module }: { module: ToolModule }) {
     try {
       const result = await toolsService.fetchProxy(config.url, 'POST');
       setPostResult(`POST complete. Upstream status: ${result.status}`);
+      await onUse(module);
     } catch (error) {
       setPostResult(error instanceof Error ? error.message : 'Shortcut POST failed');
     } finally {
@@ -187,6 +245,7 @@ function ShortcutToolModule({ module }: { module: ToolModule }) {
               href={config.url}
               target={config.newTab ? '_blank' : '_self'}
               rel={config.newTab ? 'noreferrer' : undefined}
+              onClick={() => void onUse(module)}
               className="inline-flex items-center gap-1 rounded-lg bg-cyan-600 px-3 py-2 text-sm text-white"
             >
               <ExternalLink className="h-4 w-4" />
@@ -201,11 +260,11 @@ function ShortcutToolModule({ module }: { module: ToolModule }) {
   );
 }
 
-function ApiToolModule({ module }: { module: ToolModule }) {
+function ApiToolModule({ module, onUse }: { module: ToolModule; onUse: (module: ToolModule) => Promise<void> }) {
   const config = normalizeApiConfig(module.config);
   return (
     <Card title={module.name} description="Fetch and render API endpoint data.">
-      <ApiModuleView moduleId={module.id} title={module.name} config={config} />
+      <ApiModuleView moduleId={module.id} title={module.name} config={config} onUse={() => void onUse(module)} />
     </Card>
   );
 }
@@ -227,10 +286,18 @@ function LegacyModule({ module }: { module: ToolModule }) {
   );
 }
 
-function ModuleRenderer({ module, onSaveConfig }: { module: ToolModule; onSaveConfig: (module: ToolModule, config: Record<string, unknown>) => Promise<void> }) {
-  if (module.type === 'qr') return <QrToolModule module={module} onSaveConfig={onSaveConfig} />;
-  if (module.type === 'shortcut') return <ShortcutToolModule module={module} />;
-  if (module.type === 'api') return <ApiToolModule module={module} />;
+function ModuleRenderer({
+  module,
+  onSaveConfig,
+  onUse,
+}: {
+  module: ToolModule;
+  onSaveConfig: (module: ToolModule, config: Record<string, unknown>) => Promise<void>;
+  onUse: (module: ToolModule) => Promise<void>;
+}) {
+  if (module.type === 'qr') return <QrToolModule module={module} onSaveConfig={onSaveConfig} onUse={onUse} />;
+  if (module.type === 'shortcut') return <ShortcutToolModule module={module} onUse={onUse} />;
+  if (module.type === 'api') return <ApiToolModule module={module} onUse={onUse} />;
   if (module.type === 'api_tester') return <ApiTesterToolModule module={module} />;
   return <LegacyModule module={module} />;
 }
@@ -242,6 +309,7 @@ const DEFAULT_API_CONFIG: ApiModuleConfig = { endpoint: 'https://api.github.com'
 export function ToolsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ToolModule | null>(null);
+  const [activeCategory, setActiveCategory] = useState<ToolCategory>('all');
   const [name, setName] = useState('');
   const [type, setType] = useState<ToolModuleType>('qr');
 
@@ -265,10 +333,40 @@ export function ToolsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const utilityModules = useMemo(
-    () => (modulesQuery.data?.modules || []).filter((module) => module.type !== 'services'),
-    [modulesQuery.data?.modules],
-  );
+  useEffect(() => {
+    const onExternalAdd = () => {
+      setEditing(null);
+      setName('');
+      setType('qr');
+      setQrConfig(DEFAULT_QR_CONFIG);
+      setShortcutConfig(DEFAULT_SHORTCUT_CONFIG);
+      setApiConfig(DEFAULT_API_CONFIG);
+      setRawConfig('{}');
+      setApiTestResult(null);
+      setError(null);
+      setSuccessMessage(null);
+      setModalOpen(true);
+    };
+    window.addEventListener('tools:add-requested', onExternalAdd);
+    return () => window.removeEventListener('tools:add-requested', onExternalAdd);
+  }, []);
+
+  const utilityModules = useMemo(() => {
+    const modules = (modulesQuery.data?.modules || []).filter((module) => module.type !== 'services');
+    const sorted = [...modules].sort((left, right) => {
+      const usageDelta = getUsageCount(right) - getUsageCount(left);
+      if (usageDelta !== 0) return usageDelta;
+
+      const lastUsedDelta = getLastUsedTimestamp(right) - getLastUsedTimestamp(left);
+      if (lastUsedDelta !== 0) return lastUsedDelta;
+
+      const rightCreated = Date.parse(right.created_at || '') || 0;
+      const leftCreated = Date.parse(left.created_at || '') || 0;
+      return rightCreated - leftCreated;
+    });
+
+    return sorted.filter((module) => matchesCategory(module, activeCategory));
+  }, [activeCategory, modulesQuery.data?.modules]);
 
   const createMutation = useMutation({
     mutationFn: (payload: { name: string; type: ToolModuleType; config: Record<string, unknown> }) => {
@@ -317,6 +415,21 @@ export function ToolsPage() {
       name: module.name,
       type: module.type,
       config,
+    });
+    await modulesQuery.refetch();
+  };
+
+  const markModuleUsed = async (module: ToolModule) => {
+    const currentConfig = asObject(module.config);
+    const usageCount = getUsageCount(module);
+    await toolsService.updateModule(module.id, {
+      name: module.name,
+      type: module.type,
+      config: {
+        ...currentConfig,
+        usage_count: usageCount + 1,
+        last_used_at: new Date().toISOString(),
+      },
     });
     await modulesQuery.refetch();
   };
@@ -400,7 +513,26 @@ export function ToolsPage() {
       {modulesQuery.error instanceof Error ? <p className="text-sm text-rose-300">{modulesQuery.error.message}</p> : null}
       {successMessage ? <p className="text-sm text-emerald-300">{successMessage}</p> : null}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="overflow-x-auto pb-1">
+        <div className="inline-flex min-w-full gap-2 sm:min-w-0">
+          {CATEGORY_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveCategory(tab.id)}
+              className={`rounded-full border px-3 py-2 text-xs transition-all ${
+                activeCategory === tab.id
+                  ? 'border-cyan-300/40 bg-cyan-500/15 text-cyan-100 shadow-[0_0_18px_rgba(6,182,212,0.18)]'
+                  : 'border-white/10 bg-zinc-900/40 text-slate-300 hover:border-white/20'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {utilityModules.map((module) => (
           <div key={module.id} className="rounded-2xl border border-white/10 bg-zinc-900/40 p-2">
             <div className="mb-2 flex items-center justify-between gap-2 px-2">
@@ -410,6 +542,9 @@ export function ToolsPage() {
                 {module.type === 'api_tester' ? <Server className="h-4 w-4 text-cyan-300" /> : null}
                 {module.type !== 'qr' && module.type !== 'api' && module.type !== 'api_tester' ? <Wrench className="h-4 w-4 text-cyan-300" /> : null}
                 <span>{module.name}</span>
+                <span className="rounded-full border border-white/10 bg-zinc-950/80 px-2 py-0.5 text-[11px] text-slate-400">
+                  used {getUsageCount(module)}
+                </span>
               </div>
               <div className="flex items-center gap-1">
                 <button
@@ -431,7 +566,7 @@ export function ToolsPage() {
                 </button>
               </div>
             </div>
-            <ModuleRenderer module={module} onSaveConfig={persistModuleConfig} />
+            <ModuleRenderer module={module} onSaveConfig={persistModuleConfig} onUse={markModuleUsed} />
           </div>
         ))}
       </div>

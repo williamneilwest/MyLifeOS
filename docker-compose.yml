@@ -45,6 +45,8 @@ services:
       - .:/app   # 🔥 CRITICAL: gives container access to .git + full repo
     networks:
       - homelab
+    env_file:
+      - ./backend/.env
 
 networks:
   homelab:

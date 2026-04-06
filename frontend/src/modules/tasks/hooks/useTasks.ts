@@ -6,12 +6,13 @@ import type { TaskItem, TasksOverview } from '../types';
 
 function toTaskItem(task: Task): TaskItem {
   const today = new Date().toISOString().slice(0, 10);
+  const normalizedStatus = task.status === 'completed' ? 'done' : (task.status || 'todo');
   return {
     id: task.id,
     title: task.title,
     dueDate: task.dueDate || today,
     priority: task.priority || 'medium',
-    status: task.status || 'todo',
+    status: normalizedStatus,
     notes: task.notes,
     projectId: task.projectId,
   };

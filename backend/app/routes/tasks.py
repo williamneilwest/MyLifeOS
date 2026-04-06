@@ -55,10 +55,15 @@ def create_task():
 
     task = Task(
         title=title,
+        description=str(data.get('description') or ''),
+        details=str(data.get('details') or ''),
         completed=bool(data.get('completed', False)),
         due_date=_parse_date(data.get('dueDate')),
         priority=str(data.get('priority') or 'medium'),
         status=str(data.get('status') or 'todo'),
+        category=str(data.get('category') or 'General'),
+        depends_on=list(data.get('dependsOn') or []),
+        auto_complete_rule=(str(data.get('autoCompleteRule')).strip() if data.get('autoCompleteRule') else None),
         notes=(str(data.get('notes')).strip() if data.get('notes') is not None else None),
         project_id=(str(data.get('projectId')).strip() if data.get('projectId') else None),
     )
@@ -82,12 +87,22 @@ def update_task(task_id: int):
 
     if 'completed' in data:
         task.completed = bool(data['completed'])
+    if 'description' in data:
+        task.description = str(data.get('description') or '')
+    if 'details' in data:
+        task.details = str(data.get('details') or '')
     if 'dueDate' in data:
         task.due_date = _parse_date(data.get('dueDate'))
     if 'priority' in data:
         task.priority = str(data.get('priority') or task.priority)
     if 'status' in data:
         task.status = str(data.get('status') or task.status)
+    if 'category' in data:
+        task.category = str(data.get('category') or 'General')
+    if 'dependsOn' in data:
+        task.depends_on = list(data.get('dependsOn') or [])
+    if 'autoCompleteRule' in data:
+        task.auto_complete_rule = str(data.get('autoCompleteRule')).strip() if data.get('autoCompleteRule') else None
     if 'notes' in data:
         task.notes = str(data['notes']) if data['notes'] is not None else None
     if 'projectId' in data:

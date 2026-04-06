@@ -1,13 +1,18 @@
 import { ApiError, apiClient } from './apiClient';
-import type { Project } from '../types';
+import type { Project, Task } from '../types';
 
 interface ListResponse<T> {
   data: T[];
   lastUpdated: string;
 }
 
+export interface ExampleProject extends Project {
+  tasks: Task[];
+}
+
 export const projectService = {
   getAll: () => apiClient.get<ListResponse<Project>>('/projects/'),
+  getExamples: () => apiClient.get<ListResponse<ExampleProject>>('/projects/examples'),
   async getById(id: string) {
     try {
       return await apiClient.get<Project>(`/projects/${id}`);

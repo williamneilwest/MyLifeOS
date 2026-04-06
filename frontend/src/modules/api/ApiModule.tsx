@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toolsService } from '../../services/toolsService';
 import { Button } from '../../components/ui';
 import type { ApiModuleConfig } from '../tools/types';
@@ -7,6 +7,7 @@ interface ApiModuleProps {
   moduleId: string;
   title: string;
   config: ApiModuleConfig;
+  onUse?: () => void;
 }
 
 interface ApiState {
@@ -70,18 +71,24 @@ function renderTableData(data: unknown) {
   );
 }
 
-export default function ApiModule({ moduleId, title, config }: ApiModuleProps) {
+export default function ApiModule({ moduleId, title, config, onUse }: ApiModuleProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [state, setState] = useState<ApiState | null>(null);
+  const onUseRef = useRef(onUse);
 
   const endpoint = (config.endpoint || '').trim();
   const method = config.method === 'POST' ? 'POST' : 'GET';
   const display = config.display || 'raw';
-  const refreshMs = (config.refreshInterval && config.refreshInterval > 0 ? config.refreshInterval : 0) * 1000;
+  const intervalSec = Number(config.refreshInterval);
+  const refreshMs = Number.isFinite(intervalSec) && intervalSec >= 3 ? intervalSec * 1000 : 0;
   const cacheKey = useMemo(() => `api-module-cache:${moduleId}`, [moduleId]);
 
-  const runFetch = useCallback(async () => {
+  useEffect(() => {
+    onUseRef.current = onUse;
+  }, [onUse]);
+
+  const runFetch = useCallback(async (trackUsage = false) => {
     if (!endpoint) {
       setError('Endpoint is required.');
       return;
@@ -94,6 +101,7 @@ export default function ApiModule({ moduleId, title, config }: ApiModuleProps) {
       const nextState = { status: result.status, data: result.data, contentType: result.contentType };
       setState(nextState);
       localStorage.setItem(cacheKey, JSON.stringify(nextState));
+      if (trackUsage) onUseRef.current?.();
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : 'Failed to fetch endpoint');
     } finally {
@@ -113,13 +121,13 @@ export default function ApiModule({ moduleId, title, config }: ApiModuleProps) {
   }, [cacheKey]);
 
   useEffect(() => {
-    void runFetch();
-  }, [runFetch]);
+    void runFetch(false);
+  }, [endpoint, method, runFetch]);
 
   useEffect(() => {
     if (!refreshMs) return undefined;
     const timer = window.setInterval(() => {
-      void runFetch();
+      void runFetch(false);
     }, refreshMs);
     return () => window.clearInterval(timer);
   }, [refreshMs, runFetch]);
@@ -128,7 +136,7 @@ export default function ApiModule({ moduleId, title, config }: ApiModuleProps) {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-slate-300">{title}</p>
-        <Button variant="outline" onClick={() => void runFetch()} disabled={loading}>
+        <Button variant="outline" onClick={() => void runFetch(true)} disabled={loading}>
           {loading ? 'Refreshing...' : 'Refresh'}
         </Button>
       </div>

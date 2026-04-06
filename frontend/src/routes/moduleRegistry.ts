@@ -15,7 +15,7 @@ import { workplaceModule } from '../modules/workplace';
 import type { ModuleId } from '../store/useAppStore';
 
 const allModules = [dashboardModule, servicesModule, workplaceModule, scriptsModule, aiBuilderModule, financeModule, projectsModule, homelabModule, tasksModule, planningModule, toolsModule, databaseModule];
-const primaryNavIds = new Set(['workplace', 'dashboard', 'tools']);
+const primaryNavIds = new Set(['workplace', 'dashboard', 'finance', 'tools', 'database']);
 
 export const lifeOsModules = allModules;
 
@@ -35,9 +35,10 @@ export const toolModuleRegistry: Record<ToolModuleType, unknown> = {
 // Backward-compatible alias for consumers that expect `moduleRegistry`.
 export const moduleRegistry = toolModuleRegistry;
 
-export function getModuleNavItems(activeModules: ModuleId[]) {
+export function getModuleNavItems(activeModules: ModuleId[], canAccessFinance = true) {
   return lifeOsModules
     .filter((module) => primaryNavIds.has(module.id))
+    .filter((module) => (module.id === 'finance' ? canAccessFinance : true))
     .map((module) => module.nav)
     .filter((nav) => activeModules.includes(nav.id));
 }

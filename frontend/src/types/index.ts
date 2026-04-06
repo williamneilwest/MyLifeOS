@@ -4,6 +4,7 @@ export interface Project {
   id: string;
   name: string;
   description?: string;
+  type?: 'custom' | 'example' | string;
   status: ProjectStatus;
   notes: string;
   link?: string;
@@ -12,15 +13,20 @@ export interface Project {
 }
 
 export type TaskPriority = 'low' | 'medium' | 'high';
-export type TaskStatus = 'todo' | 'in-progress' | 'done';
+export type TaskStatus = 'todo' | 'in-progress' | 'done' | 'completed';
 
 export interface Task {
   id: string;
   title: string;
+  description?: string;
+  details?: string;
   dueDate: string;
   priority: TaskPriority;
   status: TaskStatus;
   completed: boolean;
+  category?: string;
+  dependsOn?: string[];
+  autoCompleteRule?: string | null;
   notes?: string;
   projectId?: string;
 }
