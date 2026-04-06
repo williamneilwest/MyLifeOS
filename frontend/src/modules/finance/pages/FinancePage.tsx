@@ -18,6 +18,25 @@ import { useFinance } from '../hooks/useFinance';
 
 const COLORS = ['#22d3ee', '#38bdf8', '#34d399'];
 const PLAID_SCRIPT_SRC = 'https://cdn.plaid.com/link/v2/stable/link-initialize.js';
+const PLAID_DISCONNECTED_KEY = 'lifeos.plaid.disconnected';
+
+function isPlaidDisconnectedLocally(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  return window.localStorage.getItem(PLAID_DISCONNECTED_KEY) === '1';
+}
+
+function setPlaidDisconnectedLocally(disconnected: boolean): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  if (disconnected) {
+    window.localStorage.setItem(PLAID_DISCONNECTED_KEY, '1');
+  } else {
+    window.localStorage.removeItem(PLAID_DISCONNECTED_KEY);
+  }
+}
 
 function loadPlaidScript(): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -145,12 +164,26 @@ export function FinancePage() {
     setAccountsLoading(true);
     try {
       const payload = await plaidService.getAccounts(refresh);
+      if (isPlaidDisconnectedLocally()) {
+        setPlaidAccounts([]);
+        setSelectedAccountIds([]);
+        setAccountsLastSyncedAt(null);
+        setAccountsError(null);
+        return;
+      }
       const accounts = payload.accounts ?? [];
       setPlaidAccounts(accounts);
       setSelectedAccountIds(accounts.filter((account) => account.selected !== false).map((account) => account.id));
       setAccountsLastSyncedAt(payload.last_synced_at || null);
       setAccountsError(null);
     } catch (error) {
+      if (isPlaidDisconnectedLocally()) {
+        setPlaidAccounts([]);
+        setSelectedAccountIds([]);
+        setAccountsLastSyncedAt(null);
+        setAccountsError(null);
+        return;
+      }
       setAccountsError(error instanceof Error ? error.message : 'Failed to load accounts');
     } finally {
       setAccountsLoading(false);
@@ -183,6 +216,7 @@ export function FinancePage() {
         token: tokenResponse.link_token,
         onSuccess: (publicToken: string) => {
           void plaidService.exchangePublicToken(publicToken).then(async () => {
+            setPlaidDisconnectedLocally(false);
             await loadAccounts(true);
             await handleSync(true);
           });
@@ -220,6 +254,7 @@ export function FinancePage() {
     }
     try {
       await plaidService.disconnectAll();
+      setPlaidDisconnectedLocally(true);
       setPlaidAccounts([]);
       setSelectedAccountIds([]);
       setAccountsLastSyncedAt(null);
@@ -511,7 +546,7 @@ export function FinancePage() {
         actions={<Badge variant={plaidTransactions.length > 0 ? 'success' : 'warning'}>{plaidTransactions.length > 0 ? 'Linked Data Active' : 'Not Linked'}</Badge>}
       />
 
-      <FinanceSummary entries={allEntries} />
+      <FinanceSummary entries={allEntries} totalDebt={overview?.financial_health.total_debt ?? 0} />
 
       <section className="grid gap-4 sm:gap-6 xl:grid-cols-[1fr_0.95fr]">
         <Card className="h-[340px] sm:h-[360px]" title="Cashflow Mix" description="Manual and Plaid transactions combined.">
