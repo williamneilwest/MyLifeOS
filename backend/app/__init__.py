@@ -159,6 +159,12 @@ def _ensure_users_table() -> None:
     User.__table__.create(bind=db.engine, checkfirst=True)
 
 
+def _ensure_plaid_runtime_tables() -> None:
+    from .models import PlaidRuntimeState
+
+    PlaidRuntimeState.__table__.create(bind=db.engine, checkfirst=True)
+
+
 def _ensure_flow_runs_user_id() -> None:
     inspector = inspect(db.engine)
     if 'flow_runs' not in inspector.get_table_names():
@@ -202,6 +208,7 @@ def _ensure_tool_modules_table() -> None:
 def _drop_legacy_finance_schema() -> None:
     # Remove legacy finance/plaid tables that are no longer part of the app.
     drop_table_statements = [
+        "DROP TABLE IF EXISTS ai_builds CASCADE",
         "DROP TABLE IF EXISTS transactions CASCADE",
         "DROP TABLE IF EXISTS transaction_cache CASCADE",
         "DROP TABLE IF EXISTS plaid_cache CASCADE",
@@ -281,6 +288,7 @@ def create_app(config_class: type[Config] = Config) -> Flask:
                 app.logger.info('[DB] Production mode: ensuring required dynamic tables exist')
 
             _ensure_users_table()
+            _ensure_plaid_runtime_tables()
             _ensure_quick_links_table()
             _ensure_scripts_table()
             _ensure_flow_runs_user_id()

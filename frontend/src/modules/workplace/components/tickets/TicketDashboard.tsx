@@ -1,4 +1,4 @@
-import { Bot, RefreshCcw } from 'lucide-react';
+import { ListChecks, RefreshCcw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Card } from '../../../../components/ui';
@@ -141,17 +141,26 @@ export function TicketDashboard({ refreshSignal = 0 }: TicketDashboardProps) {
     const payload = filteredTickets.slice(0, 30).map((ticket) => ({
       ticket_number: text(ticket.ticket_number || ticket.number),
       title: text(ticket.title || ticket.short_description),
-      assignee: text(ticket.assignee),
-      status: text(ticket.status || ticket.state),
       priority: text(ticket.priority),
-      updated_at: text(ticket.updated_at || ticket.sys_updated_on),
       last_update_days: numberValue(ticket.last_update_days),
-      is_stale: Boolean(ticket.is_stale),
-      is_urgent: Boolean(ticket.is_urgent),
     }));
+    const prioritized = payload
+      .sort((a, b) => {
+        const priorityRank = (value: string) => {
+          const trimmed = value.trim();
+          if (trimmed.startsWith('1')) return 1;
+          if (trimmed.startsWith('2')) return 2;
+          if (trimmed.startsWith('3')) return 3;
+          return 9;
+        };
+        return priorityRank(a.priority) - priorityRank(b.priority) || b.last_update_days - a.last_update_days;
+      })
+      .slice(0, 8);
 
-    const prompt = `Review these IT tickets and provide prioritization guidance:\n\n${JSON.stringify(payload, null, 2)}`;
-    window.open(`https://chat.openai.com/?q=${encodeURIComponent(prompt)}`, '_blank', 'noopener,noreferrer');
+    const summary = prioritized.length
+      ? prioritized.map((ticket) => `${ticket.ticket_number}: ${ticket.title}`).join('\n')
+      : 'No tickets available for prioritization.';
+    window.alert(`Priority review\n\n${summary}`);
   }, [filteredTickets]);
 
   useEffect(() => {
@@ -185,8 +194,8 @@ export function TicketDashboard({ refreshSignal = 0 }: TicketDashboardProps) {
             className="inline-flex h-8 items-center gap-1 rounded-full border border-white/15 bg-zinc-950/70 px-3 text-xs text-slate-200"
             onClick={openAnalyzeStub}
           >
-            <Bot className="h-3.5 w-3.5" />
-            AI Analyze
+            <ListChecks className="h-3.5 w-3.5" />
+            Prioritize
           </button>
           <div className="ml-auto rounded-full border border-white/10 bg-zinc-950/60 px-2 py-1 text-[11px] text-slate-400">
             {tickets.length} total

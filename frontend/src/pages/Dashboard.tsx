@@ -9,7 +9,6 @@ import { ProjectGrid } from '../modules/dashboard/components/ProjectGrid';
 import { QuickActions } from '../modules/dashboard/components/QuickActions';
 import { Recommendation, RecommendationsPanel } from '../modules/dashboard/components/RecommendationsPanel';
 import { RightSidebar } from '../modules/dashboard/components/RightSidebar';
-import { AIProjectGenerator } from '../modules/dashboard/components/AIProjectGenerator';
 import { usePlanning } from '../modules/planning/hooks/usePlanning';
 import { useProjects } from '../modules/projects/hooks/useProjects';
 import { useTasks } from '../modules/tasks/hooks/useTasks';
@@ -43,7 +42,6 @@ const DEFAULT_BLOCKS: OverviewBlock[] = [
   { id: 'recommendations', label: 'Recommendations', section: 'active', size: 'large', visible: true },
   { id: 'featured-cards', label: 'Featured Systems', section: 'active', size: 'medium', visible: true },
   { id: 'project-grid', label: 'Project Grid', section: 'active', size: 'large', visible: true },
-  { id: 'ai-generator', label: 'AI Project Generator', section: 'modules', size: 'medium', visible: true },
   { id: 'focus-sidebar', label: 'Focus Sidebar', section: 'modules', size: 'small', visible: true },
 ];
 
@@ -65,11 +63,8 @@ const HOMELAB_SERVICES: HomelabService[] = [
   { id: 'plex', category: 'Media', name: 'Plex', status: 'online', url: 'https://plex.pridebytes.com', description: 'Media Server' },
   { id: 'jupyter', category: 'Development', name: 'Jupyter', status: 'online', url: 'https://jupyter.pridebytes.com', description: 'Python notebooks and data science' },
   { id: 'flask-api', category: 'Development', name: 'Flask API', status: 'online', url: 'https://api.pridebytes.com', description: 'PrideBytes Flask automation API' },
-  { id: 'pridebytes-ai', category: 'AI', name: 'PrideBytes AI', status: 'online', url: 'https://chat.pridebytes.com', description: 'PrideBytes ChatGPT Interface' },
-  { id: 'ai-gateway', category: 'AI', name: 'AI Gateway', status: 'online', url: 'http://10.0.0.10:5010', description: 'OpenAI Gateway' },
   { id: 'recipes', category: 'Kitchen', name: 'Recipes', status: 'online', url: 'https://recipes.pridebytes.com', description: 'Recipe manager' },
   { id: 'pantry', category: 'Kitchen', name: 'Pantry', status: 'online', url: 'https://pantry.pridebytes.com', description: 'Food inventory' },
-  { id: 'kitchen-ai', category: 'Kitchen', name: 'Kitchen AI', status: 'online', url: 'https://kitchen-ai.pridebytes.com', description: 'AI cooking assistant' },
   { id: 'qbittorrent', category: 'Downloads', name: 'qBittorrent', status: 'online', url: 'https://torrent.pridebytes.com', description: 'Torrent Client' },
   { id: 'portfolio', category: 'Personal', name: 'Portfolio', status: 'online', url: 'https://wnwest.com', description: 'Personal site, projects, and automation systems' },
 ];
@@ -354,10 +349,6 @@ export function Dashboard() {
       );
     }
 
-    if (block.id === 'ai-generator') {
-      content = <AIProjectGenerator />;
-    }
-
     if (block.id === 'focus-sidebar') {
       content = <RightSidebar onStartFocus={() => setFocusMode(true)} />;
     }
@@ -457,7 +448,7 @@ export function Dashboard() {
           >
             <p className="text-xs uppercase tracking-wide text-cyan-200">Workspace</p>
             <p className="mt-1 text-lg font-semibold text-white">Ticket Operations</p>
-            <p className="mt-2 text-sm text-slate-300">Open the focused ticket dashboard with quick links and AI analysis actions.</p>
+            <p className="mt-2 text-sm text-slate-300">Open the focused ticket dashboard with quick links and analysis actions.</p>
           </button>
 
           <button

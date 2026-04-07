@@ -75,23 +75,6 @@ export const servicesConfig: ServiceCategory[] = [
     ],
   },
   {
-    category: 'AI',
-    items: [
-      {
-        name: 'PrideBytes AI',
-        icon: 'mdi-robot',
-        href: 'https://chat.pridebytes.com',
-        description: 'PrideBytes ChatGPT Interface',
-      },
-      {
-        name: 'AI Gateway',
-        icon: 'mdi-api',
-        href: 'http://10.0.0.10:5010',
-        description: 'OpenAI Gateway',
-      },
-    ],
-  },
-  {
     category: 'Kitchen',
     items: [
       {
@@ -105,12 +88,6 @@ export const servicesConfig: ServiceCategory[] = [
         icon: 'mdi-food',
         href: 'https://pantry.pridebytes.com',
         description: 'Food inventory',
-      },
-      {
-        name: 'Kitchen AI',
-        icon: 'mdi-robot',
-        href: 'https://kitchen-ai.pridebytes.com',
-        description: 'AI cooking assistant',
       },
     ],
   },

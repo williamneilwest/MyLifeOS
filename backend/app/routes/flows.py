@@ -15,7 +15,7 @@ from ..auth import auth_required, get_current_user
 from ..api_response import error_response, success_response
 from ..db import db
 from ..models import FlowRun
-from ..services.ai_client import chat_endpoint, extract_ai_text, send_ai_request
+
 
 
 flows_bp = Blueprint('flows', __name__)
@@ -294,25 +294,46 @@ def _priority_rank(value: str) -> int:
     return 9
 
 
-def _build_analysis_prompt(assignee: str, tickets: list[dict[str, Any]]) -> str:
-    compact = json.dumps(tickets, ensure_ascii=False, indent=2)
-    return (
-        'You are an IT operations assistant.\n\n'
-        'Analyze the following tickets assigned to a user.\n\n'
-        'Focus on:\n'
-        '* Which tickets should be handled first\n'
-        '* Which tickets are stale and need updates\n'
-        '* Suggested approach to clear backlog efficiently\n\n'
-        'Tickets:\n'
-        '[include summarized list of tickets with:\n'
-        'ticket_number, title, age_days, last_update_days, priority]\n\n'
-        'Return:\n'
-        '* Summary of situation\n'
-        '* Action plan\n'
-        '* Priority recommendations\n\n'
-        f'Assignee: {assignee}\n'
-        f'{compact}'
+def _build_assignee_summary(
+    assignee: str,
+    ticket_count: int,
+    stale_count: int,
+    high_priority_count: int,
+    oldest_tickets: pd.DataFrame,
+    high_priority_tickets: pd.DataFrame,
+) -> str:
+    lines: list[str] = [
+        f'Assignee: {assignee}',
+        f'Tickets: {ticket_count}',
+        f'Stale tickets: {stale_count}',
+        f'High-priority tickets: {high_priority_count}',
+        '',
+        'Recommended order:',
+    ]
+
+    recommended = pd.concat([high_priority_tickets.head(5), oldest_tickets.head(5)], ignore_index=True)
+    recommended = recommended.drop_duplicates(subset=['ticket_number']).head(5)
+    if recommended.empty:
+        lines.append('- No immediate priorities detected.')
+    else:
+        for _, row in recommended.iterrows():
+            ticket_number = str(row.get('ticket_number') or 'Unknown')
+            title = str(row.get('title') or 'Untitled')
+            priority = str(row.get('priority') or 'Unknown')
+            age_days = row.get('age_days')
+            age_display = f"{float(age_days):.0f}" if age_days not in (None, '') else '0'
+            lines.append(f'- {ticket_number}: {title} (priority {priority}, age {age_display}d)')
+
+    lines.extend(
+        [
+            '',
+            'Action plan:',
+            '- Resolve high-priority tickets first.',
+            '- Update or escalate stale tickets older than 3 days.',
+            '- Close or reassign tickets with no recent updates.',
+        ]
     )
+    return '\n'.join(lines)
 
 
 def build_ticket_analytics(df: pd.DataFrame) -> dict[str, Any]:
@@ -631,26 +652,14 @@ def analyze_user_tickets():
     stale_tickets = user_df[user_df['is_stale']].sort_values('last_update_days', ascending=False)
     high_priority_tickets = user_df[user_df['priority_rank'] <= 2].sort_values(['priority_rank', 'age_days'], ascending=[True, False])
 
-    ai_scope = pd.concat([oldest_tickets, stale_tickets.head(10), high_priority_tickets.head(10)], ignore_index=True).drop_duplicates(subset=['ticket_number']).head(30)
-    ticket_summary = ai_scope[columns].fillna('').to_dict(orient='records')
-
-    prompt = _build_analysis_prompt(assignee, ticket_summary)
-    model = current_app.config.get('AI_GATEWAY_MODEL', 'gpt-4.1-mini')
-
-    try:
-        gateway_payload = send_ai_request(
-            {
-                'model': model,
-                'temperature': 0.2,
-                'prompt': prompt,
-                'messages': [{'role': 'user', 'content': prompt}],
-            },
-            endpoint=chat_endpoint(),
-        )
-        analysis = extract_ai_text(gateway_payload)
-    except Exception as error:  # noqa: BLE001
-        current_app.logger.exception('[TICKETS] analyze-user AI request failed: %s', error)
-        return error_response('AI analysis unavailable', 503)
+    analysis = _build_assignee_summary(
+        assignee=assignee,
+        ticket_count=int(len(user_df)),
+        stale_count=int(len(stale_tickets)),
+        high_priority_count=int(len(high_priority_tickets)),
+        oldest_tickets=oldest_tickets,
+        high_priority_tickets=high_priority_tickets,
+    )
 
     return success_response(
         {

@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { ToolModule } from '../modules/tools/types';
 
 export type ThemeMode = 'dark' | 'light';
-export type ModuleId = 'dashboard' | 'services' | 'workplace' | 'scripts' | 'ai-builder' | 'finance' | 'projects' | 'homelab' | 'tasks' | 'planning' | 'tools' | 'database';
+export type ModuleId = 'dashboard' | 'services' | 'workplace' | 'scripts' | 'finance' | 'projects' | 'homelab' | 'tasks' | 'planning' | 'tools' | 'database';
 
 export interface UserPreferences {
   theme: ThemeMode;
@@ -35,7 +35,7 @@ interface AppStore {
 }
 
 export const defaultActiveModules: ModuleId[] = ['workplace', 'dashboard', 'finance', 'tools', 'database'];
-const validModules = new Set<ModuleId>(['dashboard', 'services', 'workplace', 'scripts', 'ai-builder', 'finance', 'projects', 'homelab', 'tasks', 'planning', 'tools', 'database']);
+const validModules = new Set<ModuleId>(['dashboard', 'services', 'workplace', 'scripts', 'finance', 'projects', 'homelab', 'tasks', 'planning', 'tools', 'database']);
 
 export const useAppStore = create<AppStore>()(
   persist(

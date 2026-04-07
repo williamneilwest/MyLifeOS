@@ -1,4 +1,3 @@
-import { aiBuilderModule } from '../modules/ai-builder';
 import ApiModule from '../modules/api/ApiModule';
 import { databaseModule } from '../modules/database';
 import { dashboardModule } from '../modules/dashboard';
@@ -14,7 +13,7 @@ import type { ToolModuleType } from '../modules/tools/types';
 import { workplaceModule } from '../modules/workplace';
 import type { ModuleId } from '../store/useAppStore';
 
-const allModules = [dashboardModule, servicesModule, workplaceModule, scriptsModule, aiBuilderModule, financeModule, projectsModule, homelabModule, tasksModule, planningModule, toolsModule, databaseModule];
+const allModules = [dashboardModule, servicesModule, workplaceModule, scriptsModule, financeModule, projectsModule, homelabModule, tasksModule, planningModule, toolsModule, databaseModule];
 const primaryNavIds = new Set(['workplace', 'dashboard', 'finance', 'tools', 'database']);
 
 export const lifeOsModules = allModules;

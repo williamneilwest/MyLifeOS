@@ -120,7 +120,7 @@ export function ProjectsPage() {
             </h3>
             <p className="mt-1 text-sm text-slate-300">Prebuilt completed workflows generated from major app capabilities.</p>
           </div>
-          <Badge variant="info">AI Examples</Badge>
+          <Badge variant="info">Feature Examples</Badge>
         </div>
 
         {examplesLoading ? <p className="text-sm text-slate-300">Loading example projects...</p> : null}

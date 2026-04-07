@@ -1,1 +1,1 @@
-# Service package for AI Builder generation and execution helpers.
+# Service package for backend integrations and domain logic.

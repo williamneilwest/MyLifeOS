@@ -1,4 +1,4 @@
-import { Bell, Bot, CalendarDays, RefreshCcw } from 'lucide-react';
+import { Bell, CalendarDays, ListChecks, RefreshCcw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
@@ -85,8 +85,8 @@ export function WorkplacePage() {
             className="inline-flex h-9 items-center gap-1 rounded-full border border-white/15 bg-zinc-950/75 px-3 text-xs text-slate-100"
             onClick={() => window.dispatchEvent(new CustomEvent('workplace:analyze-tickets'))}
           >
-            <Bot className="h-3.5 w-3.5 text-cyan-300" />
-            AI Analyze
+            <ListChecks className="h-3.5 w-3.5 text-cyan-300" />
+            Prioritize
           </button>
         </div>
       </div>

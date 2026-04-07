@@ -1,7 +1,5 @@
 from flask import Blueprint
 
-from .ai import ai_bp
-from .ai_builder import ai_builder_bp
 from .auth import auth_bp
 from .dashboard import dashboard_bp
 from .db_viewer import db_viewer_bp
@@ -22,8 +20,6 @@ from .workplace import workplace_bp
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 api_bp.register_blueprint(auth_bp)
-api_bp.register_blueprint(ai_bp, url_prefix='/ai')
-api_bp.register_blueprint(ai_builder_bp)
 api_bp.register_blueprint(health_bp)
 api_bp.register_blueprint(db_viewer_bp)
 api_bp.register_blueprint(dashboard_bp)

@@ -22,13 +22,6 @@ SERVICES_CATEGORIES: list[dict[str, Any]] = [
         ],
     },
     {
-        'name': 'AI',
-        'services': [
-            {'name': 'AI Gateway', 'url': 'https://life.wnwest.com/api/ai/status', 'icon': 'brain', 'description': 'Central AI routing', 'status': 'unknown', 'metadata': ['API']},
-            {'name': 'AI Builder', 'url': 'https://life.wnwest.com/ai-builder', 'icon': 'sparkles', 'description': 'Idea to build workflow', 'status': 'unknown', 'metadata': ['Automation']},
-        ],
-    },
-    {
         'name': 'Development',
         'services': [
             {'name': 'GitHub', 'url': 'https://github.com', 'icon': 'code', 'description': 'Source control and CI', 'status': 'unknown', 'metadata': ['SCM']},
