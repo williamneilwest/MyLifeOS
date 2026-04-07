@@ -2,6 +2,8 @@ import { FilterDropdown } from '../../../../components/ui';
 
 interface TicketFiltersProps {
   search: string;
+  wildcard: string;
+  field: string;
   status: string;
   assignee: string;
   priority: string;
@@ -10,7 +12,10 @@ interface TicketFiltersProps {
   statuses: string[];
   assignees: string[];
   priorities: string[];
+  filterableFields: string[];
   onSearch: (value: string) => void;
+  onWildcard: (value: string) => void;
+  onField: (value: string) => void;
   onStatus: (value: string) => void;
   onAssignee: (value: string) => void;
   onPriority: (value: string) => void;
@@ -20,6 +25,8 @@ interface TicketFiltersProps {
 
 export function TicketFilters({
   search,
+  wildcard,
+  field,
   status,
   assignee,
   priority,
@@ -28,7 +35,10 @@ export function TicketFilters({
   statuses,
   assignees,
   priorities,
+  filterableFields,
   onSearch,
+  onWildcard,
+  onField,
   onStatus,
   onAssignee,
   onPriority,
@@ -36,11 +46,26 @@ export function TicketFilters({
   onUrgentOnly,
 }: TicketFiltersProps) {
   return (
-    <div className="grid w-full gap-3 overflow-visible rounded-xl border border-white/10 bg-zinc-950/60 p-3 md:grid-cols-6">
+    <div className="grid w-full gap-3 overflow-visible rounded-xl border border-white/10 bg-zinc-950/60 p-3 md:grid-cols-8">
       <input
         value={search}
         onChange={(event) => onSearch(event.target.value)}
-        placeholder="Search title or ticket #"
+        placeholder="Search title, ticket #, assignee"
+        className="w-full rounded-lg border border-white/10 bg-zinc-900/70 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-300/40"
+      />
+      <FilterDropdown
+        value={field}
+        onChange={onField}
+        placeholder="Any Field"
+        options={[
+          { value: '', label: 'Any Field' },
+          ...filterableFields.map((option) => ({ value: option, label: option })),
+        ]}
+      />
+      <input
+        value={wildcard}
+        onChange={(event) => onWildcard(event.target.value)}
+        placeholder="Wildcard (*, ?)"
         className="w-full rounded-lg border border-white/10 bg-zinc-900/70 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-300/40"
       />
       <FilterDropdown

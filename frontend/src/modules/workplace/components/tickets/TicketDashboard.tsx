@@ -1,5 +1,6 @@
-import { Bot, RefreshCcw } from 'lucide-react';
+import { Bot, RefreshCcw, Upload } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { ChangeEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Card } from '../../../../components/ui';
 import { TicketFilters } from './TicketFilters';
@@ -7,6 +8,7 @@ import { TicketDetailsModal } from './TicketDetailsModal';
 
 type TicketValue = string | number | boolean | null | undefined;
 type Ticket = Record<string, TicketValue>;
+type ViewKey = 'all' | 'closed_today' | 'closed_week' | 'closed_year' | 'needs_ack' | 'sla_risk';
 
 interface TicketApiResponse {
   success: boolean;
@@ -54,6 +56,114 @@ function ticketKey(ticket: Ticket, index: number): string {
   return `idx:${index}`;
 }
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function wildcardMatch(candidate: TicketValue, pattern: string): boolean {
+  if (!pattern.trim()) return true;
+  const source = text(candidate).toLowerCase();
+  const normalized = pattern.trim().toLowerCase();
+  const regexString = `^${escapeRegex(normalized).replace(/\\\*/g, '.*').replace(/\\\?/g, '.')}$`;
+  return new RegExp(regexString, 'i').test(source);
+}
+
+function parseDate(value: TicketValue): Date | null {
+  const raw = text(value);
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function boolLike(value: TicketValue): boolean {
+  const normalized = text(value).toLowerCase();
+  return ['true', 'yes', '1', 'y'].includes(normalized);
+}
+
+function resolveStatus(ticket: Ticket): string {
+  return text(ticket.status || ticket.state).toLowerCase();
+}
+
+function isClosed(ticket: Ticket): boolean {
+  const status = resolveStatus(ticket);
+  return status.includes('closed') || status.includes('resolved') || status.includes('done');
+}
+
+function isNeedsAck(ticket: Ticket): boolean {
+  const status = resolveStatus(ticket);
+  const ack = boolLike(ticket.acknowledged ?? ticket.is_acknowledged ?? ticket.ack);
+  return (status.includes('new') || status.includes('open')) && !ack;
+}
+
+function isSlaRisk(ticket: Ticket): boolean {
+  if (boolLike(ticket.sla_breached) || boolLike(ticket.will_breach_sla) || boolLike(ticket.is_urgent)) return true;
+  const dueDate = parseDate(ticket.sla_due_at || ticket.sla_due || ticket.due_at || ticket.target_end);
+  if (!dueDate) return false;
+  const hoursLeft = (dueDate.getTime() - Date.now()) / 3_600_000;
+  return hoursLeft <= 24;
+}
+
+function closedInRange(ticket: Ticket, since: Date): boolean {
+  if (!isClosed(ticket)) return false;
+  const closedDate = parseDate(ticket.closed_at || ticket.resolved_at || ticket.updated_at || ticket.sys_updated_on);
+  if (!closedDate) return false;
+  return closedDate >= since;
+}
+
+function csvRow(line: string): string[] {
+  const cells: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  for (let idx = 0; idx < line.length; idx += 1) {
+    const char = line[idx];
+    if (char === '"') {
+      if (inQuotes && line[idx + 1] === '"') {
+        current += '"';
+        idx += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (char === ',' && !inQuotes) {
+      cells.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
+function parseCsv(textBlob: string): Ticket[] {
+  const lines = textBlob
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length < 2) return [];
+
+  const headers = csvRow(lines[0]);
+
+  return lines.slice(1).map((line) => {
+    const values = csvRow(line);
+    return headers.reduce<Ticket>((acc, header, index) => {
+      acc[header] = values[index] ?? '';
+      return acc;
+    }, {});
+  });
+}
+
+const viewTabs: Array<{ key: ViewKey; label: string }> = [
+  { key: 'all', label: 'All Tickets' },
+  { key: 'closed_today', label: 'Closed Today' },
+  { key: 'closed_week', label: 'Closed This Week' },
+  { key: 'closed_year', label: 'Closed This Year' },
+  { key: 'needs_ack', label: 'Needs Acknowledge' },
+  { key: 'sla_risk', label: 'SLA Breach Risk' },
+];
+
 export function TicketDashboard({ refreshSignal = 0 }: TicketDashboardProps) {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,6 +176,10 @@ export function TicketDashboard({ refreshSignal = 0 }: TicketDashboardProps) {
   const [urgentOnly, setUrgentOnly] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
+  const [activeView, setActiveView] = useState<ViewKey>('all');
+  const [wildcard, setWildcard] = useState('');
+  const [wildcardField, setWildcardField] = useState('');
+  const [datasetLabel, setDatasetLabel] = useState('API');
 
   const fetchTickets = useCallback(async () => {
     setLoading(true);
@@ -82,7 +196,6 @@ export function TicketDashboard({ refreshSignal = 0 }: TicketDashboardProps) {
       }
 
       const json = (await response.json()) as TicketApiResponse;
-      console.log('API RESPONSE:', json);
 
       if (!json.success) {
         throw new Error(json.error || 'API failure');
@@ -90,6 +203,7 @@ export function TicketDashboard({ refreshSignal = 0 }: TicketDashboardProps) {
 
       const rows = Array.isArray(json.data) ? json.data : [];
       setTickets(rows);
+      setDatasetLabel('API');
       setLastFetchedAt(new Date());
       setError(null);
     } catch (fetchError) {
@@ -117,8 +231,19 @@ export function TicketDashboard({ refreshSignal = 0 }: TicketDashboardProps) {
     return Array.from(new Set(tickets.map((t) => text(t.priority)).filter(Boolean))).sort((a, b) => a.localeCompare(b));
   }, [tickets]);
 
+  const filterableFields = useMemo(() => {
+    return Array.from(new Set(tickets.flatMap((ticket) => Object.keys(ticket)))).sort((a, b) => a.localeCompare(b));
+  }, [tickets]);
+
   const filteredTickets = useMemo(() => {
     const search = query.trim().toLowerCase();
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+
+    const weekStart = new Date(dayStart);
+    weekStart.setDate(dayStart.getDate() - 7);
+
+    const yearStart = new Date(dayStart.getFullYear(), 0, 1);
 
     return tickets.filter((ticket) => {
       if (statusFilter && text(ticket.status || ticket.state) !== statusFilter) return false;
@@ -127,13 +252,28 @@ export function TicketDashboard({ refreshSignal = 0 }: TicketDashboardProps) {
       if (staleOnly && !Boolean(ticket.is_stale)) return false;
       if (urgentOnly && !Boolean(ticket.is_urgent)) return false;
 
+      if (activeView === 'closed_today' && !closedInRange(ticket, dayStart)) return false;
+      if (activeView === 'closed_week' && !closedInRange(ticket, weekStart)) return false;
+      if (activeView === 'closed_year' && !closedInRange(ticket, yearStart)) return false;
+      if (activeView === 'needs_ack' && !isNeedsAck(ticket)) return false;
+      if (activeView === 'sla_risk' && !isSlaRisk(ticket)) return false;
+
+      if (wildcard.trim()) {
+        if (wildcardField) {
+          if (!wildcardMatch(ticket[wildcardField], wildcard)) return false;
+        } else {
+          const anyHit = Object.values(ticket).some((value) => wildcardMatch(value, wildcard));
+          if (!anyHit) return false;
+        }
+      }
+
       if (!search) return true;
       const ticketNumber = text(ticket.ticket_number || ticket.number).toLowerCase();
       const title = text(ticket.title || ticket.short_description).toLowerCase();
       const assignee = text(ticket.assignee).toLowerCase();
       return ticketNumber.includes(search) || title.includes(search) || assignee.includes(search);
     });
-  }, [tickets, query, statusFilter, assigneeFilter, priorityFilter, staleOnly, urgentOnly]);
+  }, [tickets, query, statusFilter, assigneeFilter, priorityFilter, staleOnly, urgentOnly, activeView, wildcard, wildcardField]);
 
   const safeSelectedIndex = selectedIndex === null ? -1 : selectedIndex;
 
@@ -162,10 +302,30 @@ export function TicketDashboard({ refreshSignal = 0 }: TicketDashboardProps) {
     return () => window.removeEventListener('workplace:analyze-tickets', handler as EventListener);
   }, [openAnalyzeStub]);
 
+  const onUploadCsv = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const raw = await file.text();
+    const parsed = parseCsv(raw);
+
+    if (!parsed.length) {
+      setError('CSV file did not contain data rows.');
+      return;
+    }
+
+    setTickets(parsed);
+    setDatasetLabel(`CSV: ${file.name}`);
+    setLastFetchedAt(new Date());
+    setError(null);
+    setLoading(false);
+    event.target.value = '';
+  };
+
   return (
     <Card
       title="Ticket Dashboard"
-      description="Shared dataset from the latest ActiveTickets upload."
+      description="Upload CSVs or use the latest shared ticket dataset."
       className="h-full w-full max-w-full overflow-x-hidden rounded-2xl border-teal-300/20 bg-zinc-900/45 shadow-[0_12px_40px_rgba(20,184,166,0.12)] backdrop-blur-xl"
     >
       <div className="w-full overflow-x-hidden">
@@ -180,6 +340,11 @@ export function TicketDashboard({ refreshSignal = 0 }: TicketDashboardProps) {
             <RefreshCcw className="h-3.5 w-3.5" />
             Refresh
           </button>
+          <label className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-full border border-white/15 bg-zinc-950/70 px-3 text-xs text-slate-200">
+            <Upload className="h-3.5 w-3.5" />
+            Upload CSV
+            <input type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => void onUploadCsv(event)} />
+          </label>
           <button
             type="button"
             className="inline-flex h-8 items-center gap-1 rounded-full border border-white/15 bg-zinc-950/70 px-3 text-xs text-slate-200"
@@ -189,13 +354,32 @@ export function TicketDashboard({ refreshSignal = 0 }: TicketDashboardProps) {
             AI Analyze
           </button>
           <div className="ml-auto rounded-full border border-white/10 bg-zinc-950/60 px-2 py-1 text-[11px] text-slate-400">
-            {tickets.length} total
+            {tickets.length} total · {datasetLabel}
           </div>
+        </div>
+
+        <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
+          {viewTabs.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveView(tab.key)}
+              className={`rounded-full border px-3 py-1 text-xs transition ${
+                activeView === tab.key
+                  ? 'border-cyan-300/40 bg-cyan-500/20 text-cyan-100'
+                  : 'border-white/10 bg-zinc-950/50 text-slate-300'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
         <div className="mb-2 overflow-visible">
           <TicketFilters
             search={query}
+            wildcard={wildcard}
+            field={wildcardField}
             status={statusFilter}
             assignee={assigneeFilter === 'all' ? '' : assigneeFilter}
             priority={priorityFilter}
@@ -204,7 +388,10 @@ export function TicketDashboard({ refreshSignal = 0 }: TicketDashboardProps) {
             statuses={statuses}
             assignees={assignees}
             priorities={priorities}
+            filterableFields={filterableFields}
             onSearch={setQuery}
+            onWildcard={setWildcard}
+            onField={setWildcardField}
             onStatus={setStatusFilter}
             onAssignee={(value) => setAssigneeFilter(value || 'all')}
             onPriority={setPriorityFilter}
