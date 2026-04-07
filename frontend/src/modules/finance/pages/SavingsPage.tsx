@@ -1,7 +1,7 @@
-import { Link } from 'react-router-dom';
-import { ArrowLeft, Flag } from 'lucide-react';
-import { Button, Card, SectionHeader } from '../../../components/ui';
+import { Flag } from 'lucide-react';
+import { Card, SectionHeader } from '../../../components/ui';
 import { FinanceCharts } from '../components/FinanceCharts';
+import { FinanceSubNav } from '../components/FinanceSubNav';
 import { FinanceTable } from '../components/FinanceTable';
 import { MetricCard } from '../components/MetricCard';
 import { useFinanceDashboardData } from '../hooks/useFinanceDashboardData';
@@ -63,12 +63,8 @@ export function SavingsPage() {
         eyebrow="Finance"
         title="Savings Analytics"
         description="Measure savings consistency, retention rate, and net progress."
-        actions={
-          <Link to="/finance">
-            <Button variant="outline" className="gap-2"><ArrowLeft size={16} />Back to Finance</Button>
-          </Link>
-        }
       />
+      <FinanceSubNav />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <MetricCard label="Total Savings" value={formatCurrency(totalSavings)} subtext="All-time saved amount" />

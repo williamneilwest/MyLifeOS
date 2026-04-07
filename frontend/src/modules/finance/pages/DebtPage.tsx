@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
-import { Button, Card, SectionHeader } from '../../../components/ui';
+import { Card, SectionHeader } from '../../../components/ui';
 import { financeOverviewService, type FinanceOverviewPayload } from '../../../services/financeOverviewService';
 import { FinanceCharts } from '../components/FinanceCharts';
+import { FinanceSubNav } from '../components/FinanceSubNav';
 import { FinanceTable } from '../components/FinanceTable';
 import { MetricCard } from '../components/MetricCard';
 import { useFinanceDashboardData } from '../hooks/useFinanceDashboardData';
@@ -79,12 +78,8 @@ export function DebtPage() {
         eyebrow="Finance"
         title="Debt Analytics"
         description="Monitor debt load, payment pressure, and payoff trajectory."
-        actions={
-          <Link to="/finance">
-            <Button variant="outline" className="gap-2"><ArrowLeft size={16} />Back to Finance</Button>
-          </Link>
-        }
       />
+      <FinanceSubNav />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Total Debt" value={formatCurrency(totalDebt)} subtext="Outstanding debt balance" />

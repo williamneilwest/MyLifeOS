@@ -1,7 +1,6 @@
-import { Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
-import { Button, Card, SectionHeader } from '../../../components/ui';
+import { Card, SectionHeader } from '../../../components/ui';
 import { FinanceCharts } from '../components/FinanceCharts';
+import { FinanceSubNav } from '../components/FinanceSubNav';
 import { FinanceTable } from '../components/FinanceTable';
 import { MetricCard } from '../components/MetricCard';
 import { useFinanceDashboardData } from '../hooks/useFinanceDashboardData';
@@ -37,12 +36,8 @@ export function IncomePage() {
         eyebrow="Finance"
         title="Income Analytics"
         description="Track recurring sources, trend velocity, and month-over-month growth."
-        actions={
-          <Link to="/finance">
-            <Button variant="outline" className="gap-2"><ArrowLeft size={16} />Back to Finance</Button>
-          </Link>
-        }
       />
+      <FinanceSubNav />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <MetricCard label="Total Income" value={formatCurrency(totalIncome)} subtext="All-time recognized income" />

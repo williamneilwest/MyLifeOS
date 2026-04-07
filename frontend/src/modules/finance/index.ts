@@ -4,7 +4,7 @@ import { Navigate } from 'react-router-dom';
 import type { LifeOsModule } from '../../routes/moduleTypes';
 import { FINANCE_OWNER_USERNAME, useAuthStore } from '../../store/useAuthStore';
 
-const FinancePage = lazy(() => import('./pages/FinancePage').then((module) => ({ default: module.FinancePage })));
+const FinancePage = lazy(() => import('./pages/FinanceControlCenterPage').then((module) => ({ default: module.FinancePage })));
 const IncomePage = lazy(() => import('./pages/IncomePage').then((module) => ({ default: module.IncomePage })));
 const ExpensesPage = lazy(() => import('./pages/ExpensesPage').then((module) => ({ default: module.ExpensesPage })));
 const SavingsPage = lazy(() => import('./pages/SavingsPage').then((module) => ({ default: module.SavingsPage })));
@@ -70,4 +70,4 @@ export const financeModule: LifeOsModule = {
   ],
 };
 
-export { FinancePage } from './pages/FinancePage';
+export { FinancePage } from './pages/FinanceControlCenterPage';
