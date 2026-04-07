@@ -1,17 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, SectionHeader } from '../../../components/ui';
-import { plaidService, type PlaidAccount } from '../../../services/plaidService';
-import { useFinanceFiltersStore } from '../../../store/useFinanceFiltersStore';
 import { FinanceCharts } from '../components/FinanceCharts';
 import { FinanceSubNav } from '../components/FinanceSubNav';
 import { FinanceTable } from '../components/FinanceTable';
 import { MetricCard } from '../components/MetricCard';
-import { useFinanceData } from '../hooks/useFinanceData';
-import { useFinanceDashboardData } from '../hooks/useFinanceDashboardData';
+import { useFinanceModuleData } from '../hooks/useFinanceModuleData';
 import {
   calculateAverageDailySpend,
+  filterRowsByType,
   formatCurrency,
   groupByCategory,
   groupByMonth,
@@ -19,55 +17,21 @@ import {
 
 export function ExpensesPage() {
   const navigate = useNavigate();
-  const { rows, loading, error } = useFinanceDashboardData();
-  const [accounts, setAccounts] = useState<PlaidAccount[]>([]);
-  const accountIds = useFinanceFiltersStore((state) => state.accountIds);
-  const categories = useFinanceFiltersStore((state) => state.categories);
-  const types = useFinanceFiltersStore((state) => state.types);
-  const timeRange = useFinanceFiltersStore((state) => state.timeRange);
+  const { filteredTransactions, expenses, loading, error } = useFinanceModuleData();
 
-  useEffect(() => {
-    let isMounted = true;
-    void plaidService
-      .getAccounts(false)
-      .then((payload) => {
-        if (isMounted) {
-          setAccounts(payload.accounts || []);
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setAccounts([]);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const { filteredTransactions, expenses } = useFinanceData({
-    accounts,
-    transactions: rows,
-    filters: {
-      accountIds,
-      categories,
-      types,
-      timeRange,
-    },
-  });
-
-  const expenseRows = filteredTransactions.filter((row) => row.type === 'expense');
-
+  const expenseRows = useMemo(() => filterRowsByType(filteredTransactions, 'expense'), [filteredTransactions]);
   const totalExpenses = expenses;
-  const monthly = groupByMonth(expenseRows);
+  const monthly = useMemo(() => groupByMonth(expenseRows), [expenseRows]);
   const burnRate = monthly.length ? totalExpenses / monthly.length : 0;
   const avgDailySpend = calculateAverageDailySpend(expenseRows);
 
-  const byCategory = groupByCategory(expenseRows);
-  const pieData = byCategory.slice(0, 8).map((item) => ({ name: item.category, total: Number(item.total.toFixed(2)) }));
+  const byCategory = useMemo(() => groupByCategory(expenseRows), [expenseRows]);
+  const pieData = useMemo(
+    () => byCategory.slice(0, 8).map((item) => ({ name: item.category, total: Number(item.total.toFixed(2)) })),
+    [byCategory],
+  );
   const topSpendingCategories = byCategory.slice(0, 5);
-  const largestTransactions = [...expenseRows].sort((left, right) => right.amount - left.amount).slice(0, 5);
+  const largestTransactions = useMemo(() => [...expenseRows].sort((left, right) => right.amount - left.amount).slice(0, 5), [expenseRows]);
 
   return (
     <div className="space-y-6">
@@ -143,8 +107,16 @@ export function ExpensesPage() {
         <FinanceTable rows={expenseRows} title="Expense Transactions" />
       </Card>
 
-      {!loading && !expenseRows.length ? <Card><p className="text-sm text-zinc-400">No expense records yet. Add expenses or sync your linked accounts.</p></Card> : null}
-      {error ? <Card><p className="text-sm text-rose-300">{error}</p></Card> : null}
+      {!loading && !expenseRows.length ? (
+        <Card>
+          <p className="text-sm text-zinc-400">No expense records yet. Add expenses or sync your linked accounts.</p>
+        </Card>
+      ) : null}
+      {error ? (
+        <Card>
+          <p className="text-sm text-rose-300">{error}</p>
+        </Card>
+      ) : null}
     </div>
   );
 }

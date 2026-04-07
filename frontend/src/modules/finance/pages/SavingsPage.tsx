@@ -1,16 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { ArrowLeft, Flag } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, SectionHeader } from '../../../components/ui';
-import { plaidService, type PlaidAccount } from '../../../services/plaidService';
-import { useFinanceFiltersStore } from '../../../store/useFinanceFiltersStore';
 import { FinanceCharts } from '../components/FinanceCharts';
 import { FinanceSubNav } from '../components/FinanceSubNav';
 import { FinanceTable } from '../components/FinanceTable';
 import { MetricCard } from '../components/MetricCard';
-import { useFinanceData } from '../hooks/useFinanceData';
-import { useFinanceDashboardData } from '../hooks/useFinanceDashboardData';
+import { useFinanceModuleData } from '../hooks/useFinanceModuleData';
 import {
+  filterRowsByType,
   formatCurrency,
   formatPercent,
   groupByMonth,
@@ -18,71 +16,35 @@ import {
 
 export function SavingsPage() {
   const navigate = useNavigate();
-  const { rows, loading, error } = useFinanceDashboardData();
-  const [accounts, setAccounts] = useState<PlaidAccount[]>([]);
-  const accountIds = useFinanceFiltersStore((state) => state.accountIds);
-  const categories = useFinanceFiltersStore((state) => state.categories);
-  const types = useFinanceFiltersStore((state) => state.types);
-  const timeRange = useFinanceFiltersStore((state) => state.timeRange);
+  const { filteredTransactions, income, expenses, savings, loading, error } = useFinanceModuleData();
 
-  useEffect(() => {
-    let isMounted = true;
-    void plaidService
-      .getAccounts(false)
-      .then((payload) => {
-        if (isMounted) {
-          setAccounts(payload.accounts || []);
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setAccounts([]);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const { filteredTransactions, income, expenses, savings } = useFinanceData({
-    accounts,
-    transactions: rows,
-    filters: {
-      accountIds,
-      categories,
-      types,
-      timeRange,
-    },
-  });
-
-  const savingsRows = filteredTransactions.filter((row) => row.type === 'savings');
-  const incomeRows = filteredTransactions.filter((row) => row.type === 'income');
-  const expenseRows = filteredTransactions.filter((row) => row.type === 'expense');
+  const savingsRows = useMemo(() => filterRowsByType(filteredTransactions, 'savings'), [filteredTransactions]);
+  const incomeRows = useMemo(() => filterRowsByType(filteredTransactions, 'income'), [filteredTransactions]);
+  const expenseRows = useMemo(() => filterRowsByType(filteredTransactions, 'expense'), [filteredTransactions]);
   const savingsRate = income > 0 ? (savings / income) * 100 : 0;
 
-  const savingsMonthly = groupByMonth(savingsRows);
-  const expenseMonthly = groupByMonth(expenseRows);
-  const incomeMonthly = groupByMonth(incomeRows);
+  const savingsMonthly = useMemo(() => groupByMonth(savingsRows), [savingsRows]);
+  const expenseMonthly = useMemo(() => groupByMonth(expenseRows), [expenseRows]);
+  const incomeMonthly = useMemo(() => groupByMonth(incomeRows), [incomeRows]);
 
   const monthKeys = Array.from(new Set([...savingsMonthly, ...expenseMonthly, ...incomeMonthly].map((item) => item.month))).sort();
 
   const comparisonData = monthKeys.map((month) => {
-    const savings = savingsMonthly.find((item) => item.month === month)?.total || 0;
-    const expenses = expenseMonthly.find((item) => item.month === month)?.total || 0;
+    const monthSavings = savingsMonthly.find((item) => item.month === month)?.total || 0;
+    const monthExpenses = expenseMonthly.find((item) => item.month === month)?.total || 0;
     return {
       label: savingsMonthly.find((item) => item.month === month)?.label || expenseMonthly.find((item) => item.month === month)?.label || month,
-      savings: Number(savings.toFixed(2)),
-      expenses: Number(expenses.toFixed(2)),
+      savings: Number(monthSavings.toFixed(2)),
+      expenses: Number(monthExpenses.toFixed(2)),
     };
   });
 
   let running = 0;
   const netSavingsSeries = monthKeys.map((month) => {
-    const savings = savingsMonthly.find((item) => item.month === month)?.total || 0;
-    const income = incomeMonthly.find((item) => item.month === month)?.total || 0;
-    const expenses = expenseMonthly.find((item) => item.month === month)?.total || 0;
-    running += income - expenses + savings;
+    const monthSavings = savingsMonthly.find((item) => item.month === month)?.total || 0;
+    const monthIncome = incomeMonthly.find((item) => item.month === month)?.total || 0;
+    const monthExpenses = expenseMonthly.find((item) => item.month === month)?.total || 0;
+    running += monthIncome - monthExpenses + monthSavings;
     return {
       label:
         savingsMonthly.find((item) => item.month === month)?.label ||
@@ -151,8 +113,16 @@ export function SavingsPage() {
         <FinanceTable rows={savingsRows} title="Savings Transactions" />
       </Card>
 
-      {!loading && !savingsRows.length ? <Card><p className="text-sm text-zinc-400">No savings entries yet. Log transfers or savings contributions to begin tracking.</p></Card> : null}
-      {error ? <Card><p className="text-sm text-rose-300">{error}</p></Card> : null}
+      {!loading && !savingsRows.length ? (
+        <Card>
+          <p className="text-sm text-zinc-400">No savings entries yet. Log transfers or savings contributions to begin tracking.</p>
+        </Card>
+      ) : null}
+      {error ? (
+        <Card>
+          <p className="text-sm text-rose-300">{error}</p>
+        </Card>
+      ) : null}
     </div>
   );
 }

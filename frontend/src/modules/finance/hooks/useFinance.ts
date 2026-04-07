@@ -1,8 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { financeService } from '../../../services/financeService';
+import { financeService } from '../services/financeService';
 import type { FinanceEntry } from '../../../types';
 
-export function useFinance() {
+interface UseFinanceResult {
+  entries: FinanceEntry[];
+  loading: boolean;
+  error: string | null;
+  lastUpdated: string;
+  refresh: () => Promise<void>;
+  getById: typeof financeService.getById;
+  createEntry: (entry: FinanceEntry) => Promise<FinanceEntry>;
+  updateEntry: (id: string, updates: Partial<FinanceEntry>) => Promise<FinanceEntry | null>;
+  deleteEntry: (id: string) => Promise<boolean>;
+  addEntry: (entry: FinanceEntry) => Promise<FinanceEntry>;
+  income: number;
+  expense: number;
+  savings: number;
+  net: number;
+  fixedTarget: number;
+  saveTarget: number;
+}
+
+export function useFinance(): UseFinanceResult {
   const [entries, setEntries] = useState<FinanceEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

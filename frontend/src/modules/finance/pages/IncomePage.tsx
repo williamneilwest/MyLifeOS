@@ -1,17 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, SectionHeader } from '../../../components/ui';
-import { plaidService, type PlaidAccount } from '../../../services/plaidService';
-import { useFinanceFiltersStore } from '../../../store/useFinanceFiltersStore';
 import { FinanceCharts } from '../components/FinanceCharts';
 import { FinanceSubNav } from '../components/FinanceSubNav';
 import { FinanceTable } from '../components/FinanceTable';
 import { MetricCard } from '../components/MetricCard';
-import { useFinanceData } from '../hooks/useFinanceData';
-import { useFinanceDashboardData } from '../hooks/useFinanceDashboardData';
+import { useFinanceModuleData } from '../hooks/useFinanceModuleData';
 import {
   calculateGrowthPercent,
+  filterRowsByType,
   formatCurrency,
   groupByCategory,
   groupByMonth,
@@ -20,47 +18,10 @@ import {
 
 export function IncomePage() {
   const navigate = useNavigate();
-  const { rows, loading, error } = useFinanceDashboardData();
-  const [accounts, setAccounts] = useState<PlaidAccount[]>([]);
-  const accountIds = useFinanceFiltersStore((state) => state.accountIds);
-  const categories = useFinanceFiltersStore((state) => state.categories);
-  const types = useFinanceFiltersStore((state) => state.types);
-  const timeRange = useFinanceFiltersStore((state) => state.timeRange);
+  const { filteredTransactions, income, loading, error } = useFinanceModuleData();
 
-  useEffect(() => {
-    let isMounted = true;
-    void plaidService
-      .getAccounts(false)
-      .then((payload) => {
-        if (isMounted) {
-          setAccounts(payload.accounts || []);
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setAccounts([]);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const { filteredTransactions, income } = useFinanceData({
-    accounts,
-    transactions: rows,
-    filters: {
-      accountIds,
-      categories,
-      types,
-      timeRange,
-    },
-  });
-
-  const incomeRows = filteredTransactions.filter((row) => row.type === 'income');
-
-  const monthly = groupByMonth(incomeRows);
+  const incomeRows = useMemo(() => filterRowsByType(filteredTransactions, 'income'), [filteredTransactions]);
+  const monthly = useMemo(() => groupByMonth(incomeRows), [incomeRows]);
   const totalIncome = income;
   const monthlyIncome = getCurrentMonthTotal(incomeRows);
   const averageMonthlyIncome = monthly.length ? totalIncome / monthly.length : 0;
@@ -68,9 +29,10 @@ export function IncomePage() {
   const currentMonthTotal = monthly.length ? monthly[monthly.length - 1].total : 0;
   const growthPercent = calculateGrowthPercent(currentMonthTotal, previousMonthTotal);
 
-  const topSources = groupByCategory(incomeRows)
-    .slice(0, 6)
-    .map((item) => ({ label: item.category, total: Number(item.total.toFixed(2)) }));
+  const topSources = useMemo(
+    () => groupByCategory(incomeRows).slice(0, 6).map((item) => ({ label: item.category, total: Number(item.total.toFixed(2)) })),
+    [incomeRows],
+  );
 
   return (
     <div className="space-y-6">
@@ -117,8 +79,16 @@ export function IncomePage() {
         <FinanceTable rows={incomeRows} title="Income Transactions" />
       </Card>
 
-      {!loading && !incomeRows.length ? <Card><p className="text-sm text-zinc-400">No income records yet. Add a manual income entry or sync Plaid transactions.</p></Card> : null}
-      {error ? <Card><p className="text-sm text-rose-300">{error}</p></Card> : null}
+      {!loading && !incomeRows.length ? (
+        <Card>
+          <p className="text-sm text-zinc-400">No income records yet. Add a manual income entry or sync Plaid transactions.</p>
+        </Card>
+      ) : null}
+      {error ? (
+        <Card>
+          <p className="text-sm text-rose-300">{error}</p>
+        </Card>
+      ) : null}
     </div>
   );
 }

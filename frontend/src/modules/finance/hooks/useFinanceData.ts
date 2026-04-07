@@ -1,16 +1,8 @@
 import { useMemo } from 'react';
-import type { PlaidAccount } from '../../../services/plaidService';
-import type { FinanceTxType } from '../../../store/useFinanceFiltersStore';
-import type { TimeRangeValue } from '../components/ControlBar';
+import type { PlaidAccount } from '../services/plaidService';
+import type { FinanceFilters, FinanceTxType, TimeRange } from '../store/financeFiltersStore';
 import type { FinanceRow } from '../utils/financeAnalytics';
 import { accountCurrentBalance, isSelectedAccount } from '../utils/accountMetrics';
-
-export interface FinanceFilters {
-  accountIds: string[];
-  categories: string[];
-  types: FinanceTxType[];
-  timeRange: TimeRangeValue;
-}
 
 interface UseFinanceDataInput {
   accounts: PlaidAccount[];
@@ -18,7 +10,20 @@ interface UseFinanceDataInput {
   filters: FinanceFilters;
 }
 
-function isDateInRange(dateRaw: string, timeRange: TimeRangeValue): boolean {
+interface UseFinanceDataResult {
+  selectedAccountIds: string[];
+  effectiveAccountIds: string[];
+  filteredAccounts: PlaidAccount[];
+  accountScopedTransactions: FinanceRow[];
+  filteredTransactions: FinanceRow[];
+  income: number;
+  expenses: number;
+  savings: number;
+  debt: number;
+  netBalance: number;
+}
+
+function isDateInRange(dateRaw: string, timeRange: TimeRange): boolean {
   if (timeRange === 'all') {
     return true;
   }
@@ -61,7 +66,11 @@ function isDebtAccount(account: PlaidAccount): boolean {
   return type === 'credit' || subtype === 'loan';
 }
 
-export function useFinanceData({ accounts, transactions, filters }: UseFinanceDataInput) {
+function includesType(types: FinanceTxType[], type: FinanceRow['type']): boolean {
+  return types.includes(type);
+}
+
+export function useFinanceData({ accounts, transactions, filters }: UseFinanceDataInput): UseFinanceDataResult {
   const selectedAccountIds = useMemo(
     () => accounts.filter((account) => isSelectedAccount(account)).map((account) => account.id),
     [accounts],
@@ -69,55 +78,61 @@ export function useFinanceData({ accounts, transactions, filters }: UseFinanceDa
 
   const effectiveAccountIds = useMemo(() => {
     if (!selectedAccountIds.length) {
-      return [] as string[];
+      return [];
     }
+
     if (!filters.accountIds.length) {
       return selectedAccountIds;
     }
+
     const intersection = filters.accountIds.filter((id) => selectedAccountIds.includes(id));
     return intersection.length ? intersection : selectedAccountIds;
   }, [filters.accountIds, selectedAccountIds]);
 
-  const filteredAccounts = useMemo(() => {
-    return accounts
-      .filter((account) => isSelectedAccount(account))
-      .filter((account) => {
+  const filteredAccounts = useMemo(
+    () =>
+      accounts
+        .filter((account) => isSelectedAccount(account))
+        .filter((account) => !effectiveAccountIds.length || effectiveAccountIds.includes(account.id)),
+    [accounts, effectiveAccountIds],
+  );
+
+  const accountScopedTransactions = useMemo(
+    () =>
+      transactions.filter((transaction) => {
         if (!effectiveAccountIds.length) {
           return true;
         }
-        return effectiveAccountIds.includes(account.id);
-      });
-  }, [accounts, effectiveAccountIds]);
 
-  const accountScopedTransactions = useMemo(() => {
-    return transactions.filter((transaction) => {
-      if (!effectiveAccountIds.length) {
-        return true;
-      }
-      if (!transaction.account_id) {
-        return true;
-      }
-      return effectiveAccountIds.includes(transaction.account_id);
-    });
-  }, [effectiveAccountIds, transactions]);
-
-  const filteredTransactions = useMemo(() => {
-    return accountScopedTransactions
-      .filter((transaction) => {
-        if (!filters.categories.length) {
+        if (!transaction.account_id) {
           return true;
         }
-        const category = (transaction.category || 'Uncategorized').trim() || 'Uncategorized';
-        return filters.categories.includes(category);
-      })
-      .filter((transaction) => {
-        if (!filters.types.length) {
-          return true;
-        }
-        return filters.types.includes(transaction.type);
-      })
-      .filter((transaction) => isDateInRange(transaction.date, filters.timeRange));
-  }, [accountScopedTransactions, filters.categories, filters.timeRange, filters.types]);
+
+        return effectiveAccountIds.includes(transaction.account_id);
+      }),
+    [effectiveAccountIds, transactions],
+  );
+
+  const filteredTransactions = useMemo(
+    () =>
+      accountScopedTransactions
+        .filter((transaction) => {
+          if (!filters.categories.length) {
+            return true;
+          }
+
+          const category = (transaction.category || 'Uncategorized').trim() || 'Uncategorized';
+          return filters.categories.includes(category);
+        })
+        .filter((transaction) => {
+          if (!filters.types.length) {
+            return true;
+          }
+          return includesType(filters.types, transaction.type);
+        })
+        .filter((transaction) => isDateInRange(transaction.date, filters.timeRange)),
+    [accountScopedTransactions, filters.categories, filters.timeRange, filters.types],
+  );
 
   const totals = useMemo(() => {
     const income = filteredTransactions
@@ -142,10 +157,6 @@ export function useFinanceData({ accounts, transactions, filters }: UseFinanceDa
 
     const savings = savingsFromEntries + savingsFromAccounts;
     const netBalance = income + savings - expenses - debt;
-
-    if (import.meta.env.DEV) {
-      console.log({ income, expenses, savings, debt, netBalance });
-    }
 
     return {
       income,

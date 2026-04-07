@@ -2,18 +2,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, SectionHeader } from '../../../components/ui';
-import { financeOverviewService, type FinanceOverviewPayload } from '../../../services/financeOverviewService';
-import { plaidService, type PlaidAccount } from '../../../services/plaidService';
-import { useFinanceFiltersStore } from '../../../store/useFinanceFiltersStore';
+import { financeOverviewService, type FinanceOverviewPayload } from '../services/financeOverviewService';
 import { FinanceCharts } from '../components/FinanceCharts';
 import { FinanceSubNav } from '../components/FinanceSubNav';
 import { FinanceTable } from '../components/FinanceTable';
 import { MetricCard } from '../components/MetricCard';
-import { useFinanceData } from '../hooks/useFinanceData';
-import { useFinanceDashboardData } from '../hooks/useFinanceDashboardData';
+import { useFinanceModuleData } from '../hooks/useFinanceModuleData';
 import { accountCurrentBalance, isDebtAccount } from '../utils/accountMetrics';
 import {
   calculatePayoffMonths,
+  filterRowsByType,
   formatCurrency,
   formatPercent,
   groupByCategory,
@@ -29,68 +27,34 @@ function isDebtLikeCategory(category: string): boolean {
 
 export function DebtPage() {
   const navigate = useNavigate();
-  const { rows, loading, error } = useFinanceDashboardData();
   const [overview, setOverview] = useState<FinanceOverviewPayload | null>(null);
-  const [accounts, setAccounts] = useState<PlaidAccount[]>([]);
-  const accountIds = useFinanceFiltersStore((state) => state.accountIds);
-  const categories = useFinanceFiltersStore((state) => state.categories);
-  const types = useFinanceFiltersStore((state) => state.types);
-  const timeRange = useFinanceFiltersStore((state) => state.timeRange);
+
+  const { filteredAccounts, filteredTransactions, income, debt, loading, error } = useFinanceModuleData();
 
   useEffect(() => {
-    let isMounted = true;
+    let active = true;
+
     void financeOverviewService
       .getOverview()
       .then((payload) => {
-        if (isMounted) {
+        if (active) {
           setOverview(payload);
         }
       })
       .catch(() => {
-        if (isMounted) {
+        if (active) {
           setOverview(null);
         }
       });
 
     return () => {
-      isMounted = false;
+      active = false;
     };
   }, []);
 
-  useEffect(() => {
-    let isMounted = true;
-    void plaidService
-      .getAccounts(false)
-      .then((payload) => {
-        if (isMounted) {
-          setAccounts(payload.accounts || []);
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setAccounts([]);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const { filteredAccounts, filteredTransactions, income, debt } = useFinanceData({
-    accounts,
-    transactions: rows,
-    filters: {
-      accountIds,
-      categories,
-      types,
-      timeRange,
-    },
-  });
-
-  const expenseRows = filteredTransactions.filter((row) => row.type === 'expense');
-  const debtExpenseRows = expenseRows.filter((row) => isDebtLikeCategory(row.category || ''));
-  const debtAccounts = filteredAccounts.filter((account) => isDebtAccount(account));
+  const expenseRows = useMemo(() => filterRowsByType(filteredTransactions, 'expense'), [filteredTransactions]);
+  const debtExpenseRows = useMemo(() => expenseRows.filter((row) => isDebtLikeCategory(row.category || '')), [expenseRows]);
+  const debtAccounts = useMemo(() => filteredAccounts.filter((account) => isDebtAccount(account)), [filteredAccounts]);
   const debtToIncomeRatioRaw = income > 0 ? (debt / income) * 100 : 0;
   const debtToIncomeRatio = Number.isFinite(debtToIncomeRatioRaw) ? debtToIncomeRatioRaw : 0;
 
@@ -110,12 +74,15 @@ export function DebtPage() {
       }));
     }
     if (overview?.debts.length) {
-      return overview.debts.map((debt) => ({ name: debt.type || debt.name, total: Number(debt.balance.toFixed(2)) }));
+      return overview.debts.map((debtItem) => ({ name: debtItem.type || debtItem.name, total: Number(debtItem.balance.toFixed(2)) }));
     }
     return groupByCategory(debtExpenseRows).slice(0, 8).map((item) => ({ name: item.category, total: Number(item.total.toFixed(2)) }));
   }, [debtAccounts, debtExpenseRows, overview?.debts]);
 
-  const liabilityTrend = groupByMonth(debtExpenseRows).map((item) => ({ label: item.label, total: Number(item.total.toFixed(2)) }));
+  const liabilityTrend = useMemo(
+    () => groupByMonth(debtExpenseRows).map((item) => ({ label: item.label, total: Number(item.total.toFixed(2)) })),
+    [debtExpenseRows],
+  );
 
   return (
     <div className="space-y-6">
@@ -167,8 +134,16 @@ export function DebtPage() {
         <FinanceTable rows={debtExpenseRows} title="Debt-Related Transactions" />
       </Card>
 
-      {!loading && !debtExpenseRows.length ? <Card><p className="text-sm text-zinc-400">No debt-specific transactions detected yet. Use categories like loan, credit, or mortgage for better tracking.</p></Card> : null}
-      {error ? <Card><p className="text-sm text-rose-300">{error}</p></Card> : null}
+      {!loading && !debtExpenseRows.length ? (
+        <Card>
+          <p className="text-sm text-zinc-400">No debt-specific transactions detected yet. Use categories like loan, credit, or mortgage for better tracking.</p>
+        </Card>
+      ) : null}
+      {error ? (
+        <Card>
+          <p className="text-sm text-rose-300">{error}</p>
+        </Card>
+      ) : null}
     </div>
   );
 }
