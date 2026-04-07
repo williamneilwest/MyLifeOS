@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { apiClient } from '../services/apiClient';
 import { plaidService, type PlaidTransaction } from '../services/plaidService';
 
 interface SyncWarning {
@@ -19,6 +20,11 @@ interface PlaidSyncState {
   setTransactions: (transactions: PlaidTransaction[]) => void;
 }
 
+async function fetchFinanceTransactions(): Promise<PlaidTransaction[]> {
+  const payload = await apiClient.get<{ data: PlaidTransaction[] }>('/finance/transactions');
+  return payload.data || [];
+}
+
 let lastSyncClickAt = 0;
 
 export const usePlaidSyncStore = create<PlaidSyncState>((set, get) => ({
@@ -32,6 +38,7 @@ export const usePlaidSyncStore = create<PlaidSyncState>((set, get) => ({
   setTransactions: (transactions) => set({ transactions }),
 
   hydrateStatus: async () => {
+    const transactions = await fetchFinanceTransactions().catch(() => []);
     try {
       const status = await plaidService.getSyncStatus();
       const now = Date.now();
@@ -39,7 +46,7 @@ export const usePlaidSyncStore = create<PlaidSyncState>((set, get) => ({
 
       set({
         lastSyncedAt: status.last_synced_at,
-        transactions: status.transactions || [],
+        transactions,
         syncError: null,
       });
 
@@ -48,6 +55,7 @@ export const usePlaidSyncStore = create<PlaidSyncState>((set, get) => ({
       }
     } catch (error) {
       set({
+        transactions,
         syncError: error instanceof Error ? error.message : 'Failed to load sync status',
       });
     }
@@ -66,8 +74,9 @@ export const usePlaidSyncStore = create<PlaidSyncState>((set, get) => ({
     set({ isSyncing: true, syncError: null });
     try {
       const result = await plaidService.syncTransactions(force);
+      const transactions = await fetchFinanceTransactions();
       set({
-        transactions: result.transactions || [],
+        transactions,
         lastSyncedAt: result.last_synced_at,
         usingCachedData: Boolean(result.cached),
         syncWarning: result.warning

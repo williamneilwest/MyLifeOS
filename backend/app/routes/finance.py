@@ -113,6 +113,67 @@ def finance_overview():
     )
 
 
+@finance_bp.get('/finance/transactions', strict_slashes=False)
+@finance_owner_required
+def finance_transactions():
+    user = get_current_user()
+    plaid_rows = (
+        PlaidTransaction.query.filter_by(user_id=user.id)
+        .order_by(PlaidTransaction.date.desc(), PlaidTransaction.updated_at.desc())
+        .all()
+    )
+    manual_rows = FinanceEntry.query.order_by(FinanceEntry.date.desc(), FinanceEntry.created_at.desc()).all()
+
+    plaid_transactions = []
+    for row in plaid_rows:
+        category_value = row.category[0] if isinstance(row.category, list) and row.category else 'Linked Account'
+        tx_type = 'income' if float(row.amount or 0) < 0 else 'expense'
+        plaid_transactions.append(
+            {
+                'id': f'plaid-{row.transaction_id}',
+                'transaction_id': row.transaction_id,
+                'name': row.merchant_name or row.name,
+                'amount': abs(float(row.amount or 0)),
+                'category': str(category_value or 'Linked Account'),
+                'type': tx_type,
+                'date': row.date.isoformat() if isinstance(row.date, date) else '',
+                'account_id': row.account_id,
+                'source': 'plaid',
+            }
+        )
+
+    manual_transactions = [
+        {
+            'id': row.id,
+            'transaction_id': row.id,
+            'name': row.name,
+            'amount': float(row.amount or 0),
+            'category': row.category,
+            'type': row.entry_type,
+            'date': row.date.isoformat() if isinstance(row.date, date) else '',
+            'account_id': None,
+            'source': 'manual',
+        }
+        for row in manual_rows
+    ]
+
+    transactions = sorted(
+        [*plaid_transactions, *manual_transactions],
+        key=lambda item: (item.get('date') or '', item.get('id') or ''),
+        reverse=True,
+    )
+
+    print('PLAID TX COUNT:', len(plaid_rows))
+    print('Returning TX count:', len(transactions))
+    current_app.logger.info(
+        '[DB] transactions returned: plaid=%s manual=%s total=%s',
+        len(plaid_transactions),
+        len(manual_transactions),
+        len(transactions),
+    )
+    return success_response({'data': transactions, 'count': len(transactions)})
+
+
 @finance_bp.get('/finance/debts', strict_slashes=False)
 @finance_owner_required
 def list_debts():

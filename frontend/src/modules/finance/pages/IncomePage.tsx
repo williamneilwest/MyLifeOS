@@ -1,25 +1,67 @@
-import { Card, SectionHeader } from '../../../components/ui';
+import { useEffect, useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Button, Card, SectionHeader } from '../../../components/ui';
+import { plaidService, type PlaidAccount } from '../../../services/plaidService';
+import { useFinanceFiltersStore } from '../../../store/useFinanceFiltersStore';
 import { FinanceCharts } from '../components/FinanceCharts';
 import { FinanceSubNav } from '../components/FinanceSubNav';
 import { FinanceTable } from '../components/FinanceTable';
 import { MetricCard } from '../components/MetricCard';
+import { useFinanceData } from '../hooks/useFinanceData';
 import { useFinanceDashboardData } from '../hooks/useFinanceDashboardData';
 import {
   calculateGrowthPercent,
-  filterRowsByType,
   formatCurrency,
   groupByCategory,
   groupByMonth,
-  sumAmount,
   getCurrentMonthTotal,
 } from '../utils/financeAnalytics';
 
 export function IncomePage() {
+  const navigate = useNavigate();
   const { rows, loading, error } = useFinanceDashboardData();
-  const incomeRows = filterRowsByType(rows, 'income');
+  const [accounts, setAccounts] = useState<PlaidAccount[]>([]);
+  const accountIds = useFinanceFiltersStore((state) => state.accountIds);
+  const categories = useFinanceFiltersStore((state) => state.categories);
+  const types = useFinanceFiltersStore((state) => state.types);
+  const timeRange = useFinanceFiltersStore((state) => state.timeRange);
+
+  useEffect(() => {
+    let isMounted = true;
+    void plaidService
+      .getAccounts(false)
+      .then((payload) => {
+        if (isMounted) {
+          setAccounts(payload.accounts || []);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setAccounts([]);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const { filteredTransactions, income } = useFinanceData({
+    accounts,
+    transactions: rows,
+    filters: {
+      accountIds,
+      categories,
+      types,
+      timeRange,
+    },
+  });
+
+  const incomeRows = filteredTransactions.filter((row) => row.type === 'income');
 
   const monthly = groupByMonth(incomeRows);
-  const totalIncome = sumAmount(incomeRows);
+  const totalIncome = income;
   const monthlyIncome = getCurrentMonthTotal(incomeRows);
   const averageMonthlyIncome = monthly.length ? totalIncome / monthly.length : 0;
   const previousMonthTotal = monthly.length > 1 ? monthly[monthly.length - 2].total : 0;
@@ -32,6 +74,22 @@ export function IncomePage() {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-start justify-start">
+        <Button
+          variant="ghost"
+          className="h-8 gap-1 px-2 text-xs text-zinc-300"
+          onClick={() => {
+            if (window.history.length > 1) {
+              navigate(-1);
+              return;
+            }
+            navigate('/finance');
+          }}
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back
+        </Button>
+      </div>
       <SectionHeader
         eyebrow="Finance"
         title="Income Analytics"

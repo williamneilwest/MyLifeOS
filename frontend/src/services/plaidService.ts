@@ -11,15 +11,18 @@ export interface PlaidAccount {
   available_balance?: number | null;
   balance?: number | null;
   selected?: boolean;
+  is_selected?: boolean;
 }
 
 export interface PlaidTransaction {
   id?: string;
-  transaction_id: string;
-  account_id: string;
+  transaction_id?: string;
+  account_id?: string | null;
   name: string;
   amount: number;
-  category?: string[];
+  category?: string[] | string;
+  type?: 'income' | 'expense' | 'savings' | string;
+  source?: 'manual' | 'plaid' | string;
   date: string;
   pending?: boolean;
   merchant_name?: string | null;
@@ -47,7 +50,8 @@ function normalizeAccount(account: PlaidAccount): PlaidAccount {
     ...account,
     id: account.id || account.account_id || '',
     balance: account.current_balance ?? account.balance ?? 0,
-    selected: account.selected ?? true,
+    selected: account.selected ?? account.is_selected ?? true,
+    is_selected: account.is_selected ?? account.selected ?? true,
   };
 }
 

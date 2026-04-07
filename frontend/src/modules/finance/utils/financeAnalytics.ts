@@ -4,6 +4,7 @@ import type { PlaidTransaction } from '../../../services/plaidService';
 export type FinanceRow = FinanceEntry & {
   source: 'manual' | 'plaid';
   sourceLabel: string;
+  account_id?: string | null;
 };
 
 const CURRENCY_FORMATTER = new Intl.NumberFormat(undefined, {
@@ -56,23 +57,32 @@ export function daysBetweenInclusive(start: Date, end: Date): number {
 }
 
 function plaidToFinanceRow(transaction: PlaidTransaction): FinanceRow {
-  const plaidAmount = Number(transaction.amount || 0);
-  const isCredit = plaidAmount < 0;
+  const plaidAmount = Math.abs(Number(transaction.amount || 0));
+  const inferredType = transaction.type === 'income' || transaction.type === 'expense' || transaction.type === 'savings'
+    ? transaction.type
+    : Number(transaction.amount || 0) < 0
+      ? 'income'
+      : 'expense';
+  const category = Array.isArray(transaction.category)
+    ? transaction.category?.[0] || 'Linked Account'
+    : transaction.category || 'Linked Account';
   return {
-    id: `plaid-${transaction.transaction_id}`,
+    id: transaction.id || (transaction.transaction_id ? `plaid-${transaction.transaction_id}` : `plaid-${transaction.name}-${transaction.date}`),
     name: transaction.merchant_name || transaction.name || 'Plaid Transaction',
-    category: transaction.category?.[0] || 'Linked Account',
-    amount: Math.abs(plaidAmount),
-    type: isCredit ? 'income' : 'expense',
+    category,
+    amount: plaidAmount,
+    type: inferredType,
     date: transaction.date,
-    source: 'plaid',
-    sourceLabel: 'Plaid',
+    account_id: transaction.account_id ?? null,
+    source: transaction.source === 'manual' ? 'manual' : 'plaid',
+    sourceLabel: transaction.source === 'manual' ? 'Manual' : 'Plaid',
   };
 }
 
 function manualToFinanceRow(entry: FinanceEntry): FinanceRow {
   return {
     ...entry,
+    account_id: null,
     source: 'manual',
     sourceLabel: 'Manual',
   };

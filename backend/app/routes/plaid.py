@@ -12,7 +12,6 @@ from plaid.model.item_remove_request import ItemRemoveRequest
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
 from plaid.model.products import Products
-from plaid.model.transactions_get_request import TransactionsGetRequest
 from plaid.model.transactions_sync_request import TransactionsSyncRequest
 
 from ..api_response import error_response, success_response
@@ -265,14 +264,23 @@ def _sync_item_data(user_id: str, item: PlaidItem) -> dict[str, int | str | None
     cursor = item.cursor
     total_added_or_modified: list[dict[str, Any]] = []
     sync_warning: str | None = None
-    try:
+
+    def run_sync_loop(initial_cursor: str | None) -> tuple[str | None, list[dict[str, Any]]]:
+        loop_cursor = initial_cursor
         has_more = True
         page_count = 0
+        collected: list[dict[str, Any]] = []
+
         while has_more and page_count < MAX_SYNC_PAGES:
+            request_payload: dict[str, Any] = {'access_token': item.access_token}
+            if isinstance(loop_cursor, str) and loop_cursor.strip():
+                request_payload['cursor'] = loop_cursor
+
             sync_response = plaid_client.transactions_sync(
-                TransactionsSyncRequest(access_token=item.access_token, cursor=cursor)
+                TransactionsSyncRequest(**request_payload)
             )
             sync_payload = _to_dict(sync_response)
+            print('PLAID RAW:', sync_payload)
 
             added = sync_payload.get('added') or []
             modified = sync_payload.get('modified') or []
@@ -281,29 +289,36 @@ def _sync_item_data(user_id: str, item: PlaidItem) -> dict[str, int | str | None
             if not isinstance(modified, list):
                 modified = []
 
-            total_added_or_modified.extend(added)
-            total_added_or_modified.extend(modified)
+            collected.extend(added)
+            collected.extend(modified)
 
-            cursor = str(sync_payload.get('next_cursor') or cursor or '').strip() or None
+            loop_cursor = str(sync_payload.get('next_cursor') or loop_cursor or '').strip() or None
             has_more = bool(sync_payload.get('has_more'))
             page_count += 1
+
+        return loop_cursor, collected
+
+    try:
+        cursor, batch = run_sync_loop(cursor)
+        total_added_or_modified.extend(batch)
+
+        # Plaid can return an empty first sync; retry once to bootstrap data.
+        if len(total_added_or_modified) == 0:
+            retry_cursor, retry_batch = run_sync_loop(cursor)
+            cursor = retry_cursor
+            total_added_or_modified.extend(retry_batch)
     except Exception as sync_error:
-        # Fallback for transient sync API errors so initial data still populates.
         sync_warning = f'transactions/sync failed: {sync_error}'
-        get_response = plaid_client.transactions_get(
-            TransactionsGetRequest(
-                access_token=item.access_token,
-                start_date=date.today() - timedelta(days=365),
-                end_date=date.today(),
-            )
-        )
-        get_payload = _to_dict(get_response)
-        fallback_transactions = get_payload.get('transactions') or []
-        if not isinstance(fallback_transactions, list):
-            fallback_transactions = []
-        total_added_or_modified.extend(fallback_transactions)
+        raise
 
     created_count, updated_count = _upsert_transactions(user_id, total_added_or_modified)
+    print(f'Saved {len(total_added_or_modified)} transactions')
+    transaction_count = (
+        db.session.query(func.count(PlaidTransaction.id))
+        .filter(PlaidTransaction.user_id == user_id)
+        .scalar()
+    ) or 0
+    print('DB COUNT:', int(transaction_count))
 
     item.cursor = cursor
     item.last_synced_at = _utc_now()
@@ -550,7 +565,8 @@ def disconnect_all_plaid_items():
         except Exception as error:
             warnings.append(f'{item.item_id}: {error}')
 
-    # Remove cached account/transaction data for disconnected items.
+    # Remove cached account data for disconnected items.
+    # Keep transaction cache so historical finance views remain available after disconnect.
     account_ids = [
         row.account_id
         for row in PlaidAccount.query.filter(
@@ -565,11 +581,6 @@ def disconnect_all_plaid_items():
     ).delete(synchronize_session=False)
 
     transactions_removed = 0
-    if account_ids:
-        transactions_removed = PlaidTransaction.query.filter(
-            PlaidTransaction.user_id == user.id,
-            PlaidTransaction.account_id.in_(account_ids),
-        ).delete(synchronize_session=False)
 
     disconnected_count = PlaidItem.query.filter(
         PlaidItem.user_id == user.id,

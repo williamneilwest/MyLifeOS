@@ -32,6 +32,7 @@ class PlaidTransaction(db.Model):
             'account_id': self.account_id,
             'name': self.name,
             'amount': self.amount,
+            'type': 'income' if float(self.amount or 0) < 0 else 'expense',
             'category': self.category or [],
             'date': tx_date,
             'pending': self.pending,

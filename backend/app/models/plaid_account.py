@@ -35,6 +35,7 @@ class PlaidAccount(db.Model):
             'current_balance': self.current_balance,
             'available_balance': self.available_balance,
             'balance': self.current_balance,
+            'is_selected': self.is_selected,
             'selected': self.is_selected,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }

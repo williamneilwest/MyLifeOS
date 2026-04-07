@@ -1,19 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Card, SectionHeader } from '../../../components/ui';
+import { ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Button, Card, SectionHeader } from '../../../components/ui';
 import { financeOverviewService, type FinanceOverviewPayload } from '../../../services/financeOverviewService';
+import { plaidService, type PlaidAccount } from '../../../services/plaidService';
+import { useFinanceFiltersStore } from '../../../store/useFinanceFiltersStore';
 import { FinanceCharts } from '../components/FinanceCharts';
 import { FinanceSubNav } from '../components/FinanceSubNav';
 import { FinanceTable } from '../components/FinanceTable';
 import { MetricCard } from '../components/MetricCard';
+import { useFinanceData } from '../hooks/useFinanceData';
 import { useFinanceDashboardData } from '../hooks/useFinanceDashboardData';
+import { accountCurrentBalance, isDebtAccount } from '../utils/accountMetrics';
 import {
   calculatePayoffMonths,
-  filterRowsByType,
   formatCurrency,
   formatPercent,
   groupByCategory,
   groupByMonth,
-  sumAmount,
 } from '../utils/financeAnalytics';
 
 const DEBT_KEYWORDS = ['debt', 'loan', 'credit', 'mortgage', 'student', 'car note', 'minimum payment'];
@@ -24,8 +28,14 @@ function isDebtLikeCategory(category: string): boolean {
 }
 
 export function DebtPage() {
+  const navigate = useNavigate();
   const { rows, loading, error } = useFinanceDashboardData();
   const [overview, setOverview] = useState<FinanceOverviewPayload | null>(null);
+  const [accounts, setAccounts] = useState<PlaidAccount[]>([]);
+  const accountIds = useFinanceFiltersStore((state) => state.accountIds);
+  const categories = useFinanceFiltersStore((state) => state.categories);
+  const types = useFinanceFiltersStore((state) => state.types);
+  const timeRange = useFinanceFiltersStore((state) => state.timeRange);
 
   useEffect(() => {
     let isMounted = true;
@@ -47,33 +57,84 @@ export function DebtPage() {
     };
   }, []);
 
-  const incomeRows = filterRowsByType(rows, 'income');
-  const expenseRows = filterRowsByType(rows, 'expense');
+  useEffect(() => {
+    let isMounted = true;
+    void plaidService
+      .getAccounts(false)
+      .then((payload) => {
+        if (isMounted) {
+          setAccounts(payload.accounts || []);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setAccounts([]);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const { filteredAccounts, filteredTransactions, income, debt } = useFinanceData({
+    accounts,
+    transactions: rows,
+    filters: {
+      accountIds,
+      categories,
+      types,
+      timeRange,
+    },
+  });
+
+  const expenseRows = filteredTransactions.filter((row) => row.type === 'expense');
   const debtExpenseRows = expenseRows.filter((row) => isDebtLikeCategory(row.category || ''));
+  const debtAccounts = filteredAccounts.filter((account) => isDebtAccount(account));
+  const debtToIncomeRatioRaw = income > 0 ? (debt / income) * 100 : 0;
+  const debtToIncomeRatio = Number.isFinite(debtToIncomeRatioRaw) ? debtToIncomeRatioRaw : 0;
 
-  const totalDebt = overview?.financial_health.total_debt ?? sumAmount(debtExpenseRows);
-  const monthlyIncome = sumAmount(incomeRows);
-  const debtToIncomeRatio = overview?.financial_health.debt_to_income_ratio ?? (monthlyIncome > 0 ? (totalDebt / monthlyIncome) * 100 : 0);
-
-  const minimumPaymentEstimate = overview?.financial_health.total_minimum_payments ?? totalDebt * 0.02;
+  const minimumPaymentEstimate = overview?.financial_health.total_minimum_payments ?? debt * 0.02;
   const weightedApr =
     overview?.debts.length
-      ? overview.debts.reduce((sum, debt) => sum + debt.interest_rate * debt.balance, 0) / Math.max(1, totalDebt)
+      ? overview.debts.reduce((sum, debtItem) => sum + debtItem.interest_rate * debtItem.balance, 0) / Math.max(1, debt)
       : 7.5;
 
-  const payoffMonths = calculatePayoffMonths(totalDebt, minimumPaymentEstimate, weightedApr);
+  const payoffMonths = calculatePayoffMonths(debt, minimumPaymentEstimate, weightedApr);
 
   const debtBreakdown = useMemo(() => {
+    if (debtAccounts.length) {
+      return debtAccounts.map((account) => ({
+        name: account.name || account.subtype || account.type || 'Debt Account',
+        total: Number(Math.abs(accountCurrentBalance(account)).toFixed(2)),
+      }));
+    }
     if (overview?.debts.length) {
       return overview.debts.map((debt) => ({ name: debt.type || debt.name, total: Number(debt.balance.toFixed(2)) }));
     }
     return groupByCategory(debtExpenseRows).slice(0, 8).map((item) => ({ name: item.category, total: Number(item.total.toFixed(2)) }));
-  }, [debtExpenseRows, overview?.debts]);
+  }, [debtAccounts, debtExpenseRows, overview?.debts]);
 
   const liabilityTrend = groupByMonth(debtExpenseRows).map((item) => ({ label: item.label, total: Number(item.total.toFixed(2)) }));
 
   return (
     <div className="space-y-6">
+      <div className="flex items-start justify-start">
+        <Button
+          variant="ghost"
+          className="h-8 gap-1 px-2 text-xs text-zinc-300"
+          onClick={() => {
+            if (window.history.length > 1) {
+              navigate(-1);
+              return;
+            }
+            navigate('/finance');
+          }}
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back
+        </Button>
+      </div>
       <SectionHeader
         eyebrow="Finance"
         title="Debt Analytics"
@@ -82,7 +143,7 @@ export function DebtPage() {
       <FinanceSubNav />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Total Debt" value={formatCurrency(totalDebt)} subtext="Outstanding debt balance" />
+        <MetricCard label="Total Debt" value={formatCurrency(debt)} subtext="Outstanding debt balance" />
         <MetricCard label="Debt vs Income" value={formatPercent(debtToIncomeRatio)} subtext="Debt-to-income ratio" />
         <MetricCard
           label="Estimated Payoff Time"

@@ -1,29 +1,65 @@
-import { Flag } from 'lucide-react';
-import { Card, SectionHeader } from '../../../components/ui';
+import { useEffect, useState } from 'react';
+import { ArrowLeft, Flag } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Button, Card, SectionHeader } from '../../../components/ui';
+import { plaidService, type PlaidAccount } from '../../../services/plaidService';
+import { useFinanceFiltersStore } from '../../../store/useFinanceFiltersStore';
 import { FinanceCharts } from '../components/FinanceCharts';
 import { FinanceSubNav } from '../components/FinanceSubNav';
 import { FinanceTable } from '../components/FinanceTable';
 import { MetricCard } from '../components/MetricCard';
+import { useFinanceData } from '../hooks/useFinanceData';
 import { useFinanceDashboardData } from '../hooks/useFinanceDashboardData';
 import {
-  filterRowsByType,
   formatCurrency,
   formatPercent,
   groupByMonth,
-  sumAmount,
 } from '../utils/financeAnalytics';
 
 export function SavingsPage() {
+  const navigate = useNavigate();
   const { rows, loading, error } = useFinanceDashboardData();
+  const [accounts, setAccounts] = useState<PlaidAccount[]>([]);
+  const accountIds = useFinanceFiltersStore((state) => state.accountIds);
+  const categories = useFinanceFiltersStore((state) => state.categories);
+  const types = useFinanceFiltersStore((state) => state.types);
+  const timeRange = useFinanceFiltersStore((state) => state.timeRange);
 
-  const savingsRows = filterRowsByType(rows, 'savings');
-  const incomeRows = filterRowsByType(rows, 'income');
-  const expenseRows = filterRowsByType(rows, 'expense');
+  useEffect(() => {
+    let isMounted = true;
+    void plaidService
+      .getAccounts(false)
+      .then((payload) => {
+        if (isMounted) {
+          setAccounts(payload.accounts || []);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setAccounts([]);
+        }
+      });
 
-  const totalSavings = sumAmount(savingsRows);
-  const totalIncome = sumAmount(incomeRows);
-  const totalExpenses = sumAmount(expenseRows);
-  const savingsRate = totalIncome > 0 ? (totalSavings / totalIncome) * 100 : 0;
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const { filteredTransactions, income, expenses, savings } = useFinanceData({
+    accounts,
+    transactions: rows,
+    filters: {
+      accountIds,
+      categories,
+      types,
+      timeRange,
+    },
+  });
+
+  const savingsRows = filteredTransactions.filter((row) => row.type === 'savings');
+  const incomeRows = filteredTransactions.filter((row) => row.type === 'income');
+  const expenseRows = filteredTransactions.filter((row) => row.type === 'expense');
+  const savingsRate = income > 0 ? (savings / income) * 100 : 0;
 
   const savingsMonthly = groupByMonth(savingsRows);
   const expenseMonthly = groupByMonth(expenseRows);
@@ -59,6 +95,22 @@ export function SavingsPage() {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-start justify-start">
+        <Button
+          variant="ghost"
+          className="h-8 gap-1 px-2 text-xs text-zinc-300"
+          onClick={() => {
+            if (window.history.length > 1) {
+              navigate(-1);
+              return;
+            }
+            navigate('/finance');
+          }}
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back
+        </Button>
+      </div>
       <SectionHeader
         eyebrow="Finance"
         title="Savings Analytics"
@@ -67,9 +119,9 @@ export function SavingsPage() {
       <FinanceSubNav />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <MetricCard label="Total Savings" value={formatCurrency(totalSavings)} subtext="All-time saved amount" />
+        <MetricCard label="Total Savings" value={formatCurrency(savings)} subtext="All-time saved amount" />
         <MetricCard label="Savings Rate" value={formatPercent(savingsRate)} subtext="Savings as a share of income" />
-        <MetricCard label="Net Position" value={formatCurrency(totalIncome - totalExpenses + totalSavings)} subtext="Income - expenses + savings" />
+        <MetricCard label="Net Position" value={formatCurrency(income - expenses + savings)} subtext="Income - expenses + savings" />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
