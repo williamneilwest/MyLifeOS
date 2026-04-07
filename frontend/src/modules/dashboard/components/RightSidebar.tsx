@@ -8,7 +8,7 @@ interface RightSidebarProps {
   onStartFocus: (minutes: number) => void;
 }
 
-type ActivityType = 'tasks' | 'finance' | 'system';
+type ActivityType = 'tasks' | 'planning' | 'system';
 
 type ActivityFilter = 'all' | ActivityType;
 
@@ -22,7 +22,7 @@ interface ActivityEvent {
 
 const activityEvents: ActivityEvent[] = [
   { id: 'a1', type: 'tasks', label: 'Task sweep complete', detail: '4 tasks reprioritized', time: '9m ago' },
-  { id: 'a2', type: 'finance', label: 'Budget sync', detail: 'Transactions reconciled', time: '22m ago' },
+  { id: 'a2', type: 'planning', label: 'Planning check-in', detail: 'Goals refreshed', time: '22m ago' },
   { id: 'a3', type: 'system', label: 'Homelab health check', detail: 'All services online', time: '41m ago' },
   { id: 'a4', type: 'tasks', label: 'Project blocker flagged', detail: 'Dependency update pending', time: '1h ago' },
 ];
@@ -75,7 +75,7 @@ function RecentActivity() {
   return (
     <Card title="Recent Activity" description="Latest actions and logs.">
       <div className="mb-3 flex flex-wrap gap-2">
-        {(['all', 'tasks', 'finance', 'system'] as const).map((item) => (
+        {(['all', 'tasks', 'planning', 'system'] as const).map((item) => (
           <button
             key={item}
             type="button"

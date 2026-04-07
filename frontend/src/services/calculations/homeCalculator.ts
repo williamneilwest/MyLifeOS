@@ -21,8 +21,8 @@ export function calculateHomePlan(input: HomePlanInput): HomePlanResult {
   const purchaseDate = new Date();
   purchaseDate.setMonth(purchaseDate.getMonth() + monthsUntilReady);
 
-  const financedAmount = Math.max(input.targetHomePrice - downPaymentRequired, 0);
-  const principalAndInterest = calculateMonthlyMortgage(financedAmount, input.interestRate, input.loanTermYears);
+  const loanPrincipal = Math.max(input.targetHomePrice - downPaymentRequired, 0);
+  const principalAndInterest = calculateMonthlyMortgage(loanPrincipal, input.interestRate, input.loanTermYears);
   const taxesMonthly = (input.targetHomePrice * (input.propertyTaxRate / 100)) / 12;
   const insuranceMonthly = input.insuranceMonthly;
   const totalMonthlyPayment = principalAndInterest + taxesMonthly + insuranceMonthly;

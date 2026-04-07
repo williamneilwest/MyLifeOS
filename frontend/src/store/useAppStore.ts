@@ -35,6 +35,7 @@ interface AppStore {
 }
 
 export const defaultActiveModules: ModuleId[] = ['workplace', 'dashboard', 'finance', 'tools', 'database'];
+const validModules = new Set<ModuleId>(['dashboard', 'services', 'workplace', 'scripts', 'ai-builder', 'finance', 'projects', 'homelab', 'tasks', 'planning', 'tools', 'database']);
 
 export const useAppStore = create<AppStore>()(
   persist(
@@ -100,14 +101,12 @@ export const useAppStore = create<AppStore>()(
       version: 2,
       migrate: (persistedState) => {
         const state = persistedState as Partial<AppStore> | undefined;
-        const activeModules = Array.isArray(state?.activeModules) ? state.activeModules : defaultActiveModules;
-        const normalizedActiveModules = [
-          ...new Set([
-            ...activeModules,
-            'finance',
-            'database',
-          ]),
-        ] as ModuleId[];
+        const persistedModules = Array.isArray(state?.activeModules) ? state.activeModules : defaultActiveModules;
+        const normalizedActiveModules = [...new Set(persistedModules.filter((module): module is ModuleId => validModules.has(module as ModuleId)))];
+        if (!normalizedActiveModules.includes('database')) {
+          normalizedActiveModules.push('database');
+        }
+
         return {
           ...state,
           tools: Array.isArray(state?.tools) ? state.tools : [],

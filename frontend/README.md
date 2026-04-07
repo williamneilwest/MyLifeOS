@@ -1,6 +1,6 @@
 # Life OS Dashboard
 
-Modular React + Vite + TypeScript personal operating system for finance, projects, tasks, planning, homelab, and utility workflows.
+Modular React + Vite + TypeScript personal operating system for projects, tasks, planning, homelab, and utility workflows.
 
 ## Tech Stack
 
@@ -37,7 +37,6 @@ Each module is self-contained under `src/modules/<module-name>/`:
 
 Implemented modules:
 - Dashboard
-- Finance
 - Projects
 - Homelab
 - Tasks

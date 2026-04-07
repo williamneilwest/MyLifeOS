@@ -12,8 +12,6 @@ class User(db.Model):
     id = db.Column(db.String(64), primary_key=True, default=lambda: str(uuid4()))
     username = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
-    plaid_access_token = db.Column(db.Text, nullable=True)
-    last_synced_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     def set_password(self, raw_password: str) -> None:

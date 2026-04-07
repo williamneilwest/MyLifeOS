@@ -13,10 +13,6 @@ interface AuthState {
   reset: () => void;
 }
 
-export const FINANCE_OWNER_USERNAME = String(import.meta.env.VITE_FINANCE_OWNER_USERNAME || 'will')
-  .trim()
-  .toLowerCase();
-
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   checked: false,

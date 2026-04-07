@@ -1,16 +1,16 @@
 import { aiBuilderModule } from '../modules/ai-builder';
 import ApiModule from '../modules/api/ApiModule';
-import type { ToolModuleType } from '../modules/tools/types';
 import { databaseModule } from '../modules/database';
 import { dashboardModule } from '../modules/dashboard';
 import { financeModule } from '../modules/finance';
+import { homelabModule } from '../modules/homelab';
+import { planningModule } from '../modules/planning';
 import { projectsModule } from '../modules/projects';
 import { scriptsModule } from '../modules/scripts';
 import { servicesModule } from '../modules/services';
-import { homelabModule } from '../modules/homelab';
 import { tasksModule } from '../modules/tasks';
-import { planningModule } from '../modules/planning';
 import { toolsModule } from '../modules/tools';
+import type { ToolModuleType } from '../modules/tools/types';
 import { workplaceModule } from '../modules/workplace';
 import type { ModuleId } from '../store/useAppStore';
 
@@ -35,11 +35,11 @@ export const toolModuleRegistry: Record<ToolModuleType, unknown> = {
 // Backward-compatible alias for consumers that expect `moduleRegistry`.
 export const moduleRegistry = toolModuleRegistry;
 
-export function getModuleNavItems(activeModules: ModuleId[], canAccessFinance = true) {
+export function getModuleNavItems(activeModules: ModuleId[]) {
   return lifeOsModules
     .filter((module) => primaryNavIds.has(module.id))
-    .filter((module) => (module.id === 'finance' ? canAccessFinance : true))
     .map((module) => module.nav)
     .filter((nav) => activeModules.includes(nav.id));
 }
+
 export const moduleRoutes = lifeOsModules.flatMap((module) => module.routes);

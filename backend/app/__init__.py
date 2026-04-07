@@ -10,6 +10,7 @@ from config import Config
 from .api_response import error_response
 from .db import db
 from .routes import api_bp
+from .services.plaid_config import log_plaid_environment
 
 
 def _seed_if_empty() -> None:
@@ -158,124 +159,6 @@ def _ensure_users_table() -> None:
     User.__table__.create(bind=db.engine, checkfirst=True)
 
 
-def _ensure_users_plaid_columns() -> None:
-    inspector = inspect(db.engine)
-    if 'users' not in inspector.get_table_names():
-        return
-
-    columns = {column['name'] for column in inspector.get_columns('users')}
-    statements = []
-    if 'plaid_access_token' not in columns:
-        statements.append('ALTER TABLE users ADD COLUMN plaid_access_token TEXT')
-    if 'last_synced_at' not in columns:
-        statements.append('ALTER TABLE users ADD COLUMN last_synced_at TIMESTAMP')
-
-    for statement in statements:
-        db.session.execute(text(statement))
-
-    if statements:
-        db.session.commit()
-
-
-def _ensure_plaid_tables() -> None:
-    from .models import PlaidAccount, PlaidCallLog, PlaidItem
-
-    PlaidItem.__table__.create(bind=db.engine, checkfirst=True)
-    PlaidCallLog.__table__.create(bind=db.engine, checkfirst=True)
-    PlaidAccount.__table__.create(bind=db.engine, checkfirst=True)
-
-    inspector = inspect(db.engine)
-    if 'plaid_accounts' not in inspector.get_table_names():
-        return
-
-    columns = {column['name'] for column in inspector.get_columns('plaid_accounts')}
-    statements = []
-    if 'item_id' not in columns:
-        statements.append("ALTER TABLE plaid_accounts ADD COLUMN item_id VARCHAR(128)")
-    if 'type' not in columns:
-        statements.append("ALTER TABLE plaid_accounts ADD COLUMN type VARCHAR(64)")
-    if 'current_balance' not in columns:
-        statements.append("ALTER TABLE plaid_accounts ADD COLUMN current_balance DOUBLE PRECISION NOT NULL DEFAULT 0")
-    if 'available_balance' not in columns:
-        statements.append("ALTER TABLE plaid_accounts ADD COLUMN available_balance DOUBLE PRECISION")
-    if 'is_selected' not in columns:
-        statements.append("ALTER TABLE plaid_accounts ADD COLUMN is_selected BOOLEAN NOT NULL DEFAULT TRUE")
-
-    for statement in statements:
-        db.session.execute(text(statement))
-    if statements:
-        db.session.commit()
-
-    # Ensure is_selected always has a DB default for inserts that omit it.
-    db.session.execute(text("ALTER TABLE plaid_accounts ALTER COLUMN is_selected SET DEFAULT TRUE"))
-    db.session.execute(text("UPDATE plaid_accounts SET is_selected = TRUE WHERE is_selected IS NULL"))
-    db.session.commit()
-
-    # Migrate legacy balance columns into current canonical names if present.
-    refreshed_columns = {column['name'] for column in inspector.get_columns('plaid_accounts')}
-    if 'account_type' in refreshed_columns and 'type' in refreshed_columns:
-        db.session.execute(text("UPDATE plaid_accounts SET type = COALESCE(type, account_type)"))
-        db.session.commit()
-    if 'balance_current' in refreshed_columns and 'current_balance' in refreshed_columns:
-        # Legacy schema compatibility: old NOT NULL column must always have a value.
-        db.session.execute(text("ALTER TABLE plaid_accounts ALTER COLUMN balance_current SET DEFAULT 0"))
-        db.session.execute(text("UPDATE plaid_accounts SET current_balance = COALESCE(current_balance, balance_current, 0)"))
-        db.session.execute(text("UPDATE plaid_accounts SET balance_current = COALESCE(balance_current, current_balance, 0)"))
-        db.session.commit()
-    if 'balance_available' in refreshed_columns and 'available_balance' in refreshed_columns:
-        db.session.execute(text("UPDATE plaid_accounts SET available_balance = COALESCE(available_balance, balance_available)"))
-        db.session.execute(text("UPDATE plaid_accounts SET balance_available = COALESCE(balance_available, available_balance)"))
-        db.session.commit()
-
-    # Timestamp resilience: add missing timestamp columns, then enforce DB-level defaults + non-null backfill.
-    timestamp_targets = ('plaid_accounts', 'plaid_items', 'plaid_transactions')
-    for table_name in timestamp_targets:
-        table_columns = {column['name'] for column in inspector.get_columns(table_name)}
-        if 'created_at' not in table_columns:
-            db.session.execute(text(f"ALTER TABLE {table_name} ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT NOW()"))
-        if 'updated_at' not in table_columns:
-            db.session.execute(text(f"ALTER TABLE {table_name} ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT NOW()"))
-    db.session.commit()
-
-    timestamp_fix_statements = [
-        "UPDATE plaid_accounts SET created_at = NOW() WHERE created_at IS NULL",
-        "UPDATE plaid_accounts SET updated_at = NOW() WHERE updated_at IS NULL",
-        "ALTER TABLE plaid_accounts ALTER COLUMN created_at SET DEFAULT NOW()",
-        "ALTER TABLE plaid_accounts ALTER COLUMN updated_at SET DEFAULT NOW()",
-        "ALTER TABLE plaid_accounts ALTER COLUMN created_at SET NOT NULL",
-        "ALTER TABLE plaid_accounts ALTER COLUMN updated_at SET NOT NULL",
-        "UPDATE plaid_items SET created_at = NOW() WHERE created_at IS NULL",
-        "UPDATE plaid_items SET updated_at = NOW() WHERE updated_at IS NULL",
-        "ALTER TABLE plaid_items ALTER COLUMN created_at SET DEFAULT NOW()",
-        "ALTER TABLE plaid_items ALTER COLUMN updated_at SET DEFAULT NOW()",
-        "ALTER TABLE plaid_items ALTER COLUMN created_at SET NOT NULL",
-        "ALTER TABLE plaid_items ALTER COLUMN updated_at SET NOT NULL",
-        "UPDATE plaid_transactions SET created_at = NOW() WHERE created_at IS NULL",
-        "UPDATE plaid_transactions SET updated_at = NOW() WHERE updated_at IS NULL",
-        "ALTER TABLE plaid_transactions ALTER COLUMN created_at SET DEFAULT NOW()",
-        "ALTER TABLE plaid_transactions ALTER COLUMN updated_at SET DEFAULT NOW()",
-        "ALTER TABLE plaid_transactions ALTER COLUMN created_at SET NOT NULL",
-        "ALTER TABLE plaid_transactions ALTER COLUMN updated_at SET NOT NULL",
-    ]
-    for statement in timestamp_fix_statements:
-        db.session.execute(text(statement))
-    db.session.commit()
-
-
-def _ensure_financial_overview_tables() -> None:
-    from .models import AllocationRule, Debt, IncomeSource
-
-    Debt.__table__.create(bind=db.engine, checkfirst=True)
-    IncomeSource.__table__.create(bind=db.engine, checkfirst=True)
-    AllocationRule.__table__.create(bind=db.engine, checkfirst=True)
-
-
-def _ensure_transactions_table() -> None:
-    from .models import PlaidTransaction
-
-    PlaidTransaction.__table__.create(bind=db.engine, checkfirst=True)
-
-
 def _ensure_flow_runs_user_id() -> None:
     inspector = inspect(db.engine)
     if 'flow_runs' not in inspector.get_table_names():
@@ -316,6 +199,32 @@ def _ensure_tool_modules_table() -> None:
         db.session.commit()
 
 
+def _drop_legacy_finance_schema() -> None:
+    # Remove legacy finance/plaid tables that are no longer part of the app.
+    drop_table_statements = [
+        "DROP TABLE IF EXISTS transactions CASCADE",
+        "DROP TABLE IF EXISTS transaction_cache CASCADE",
+        "DROP TABLE IF EXISTS plaid_cache CASCADE",
+        "DROP TABLE IF EXISTS plaid_transaction_cache CASCADE",
+        "DROP TABLE IF EXISTS plaid_sync CASCADE",
+        "DROP TABLE IF EXISTS plaid_call_logs CASCADE",
+        "DROP TABLE IF EXISTS plaid_accounts CASCADE",
+        "DROP TABLE IF EXISTS plaid_items CASCADE",
+        "DROP TABLE IF EXISTS plaid_transactions CASCADE",
+        "DROP TABLE IF EXISTS finance_entries CASCADE",
+        "DROP TABLE IF EXISTS debts CASCADE",
+        "DROP TABLE IF EXISTS income_sources CASCADE",
+        "DROP TABLE IF EXISTS allocation_rules CASCADE",
+    ]
+    for statement in drop_table_statements:
+        db.session.execute(text(statement))
+
+    # Remove legacy user columns used only by finance/plaid integrations.
+    db.session.execute(text("ALTER TABLE users DROP COLUMN IF EXISTS plaid_access_token"))
+    db.session.execute(text("ALTER TABLE users DROP COLUMN IF EXISTS last_synced_at"))
+    db.session.commit()
+
+
 def create_app(config_class: type[Config] = Config) -> Flask:
     app = Flask(__name__)
     app.config.from_object(config_class)
@@ -337,6 +246,7 @@ def create_app(config_class: type[Config] = Config) -> Flask:
         return error_response('Internal server error', 500)
 
     try:
+        log_plaid_environment(app.logger)
         CORS(
             app,
             resources={
@@ -347,10 +257,6 @@ def create_app(config_class: type[Config] = Config) -> Flask:
             },
         )
         app.register_blueprint(api_bp)
-        print('\n=== REGISTERED ROUTES ===')
-        for rule in app.url_map.iter_rules():
-            print(rule)
-        print('========================\n')
         db.init_app(app)
 
         # Ensure models are loaded into SQLAlchemy metadata before table creation.
@@ -375,14 +281,11 @@ def create_app(config_class: type[Config] = Config) -> Flask:
                 app.logger.info('[DB] Production mode: ensuring required dynamic tables exist')
 
             _ensure_users_table()
-            _ensure_users_plaid_columns()
-            _ensure_plaid_tables()
-            _ensure_financial_overview_tables()
-            _ensure_transactions_table()
             _ensure_quick_links_table()
             _ensure_scripts_table()
             _ensure_flow_runs_user_id()
             _ensure_tool_modules_table()
+            _drop_legacy_finance_schema()
 
             _ensure_projects_description_column()
             _ensure_projects_type_column()

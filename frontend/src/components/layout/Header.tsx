@@ -9,7 +9,6 @@ import { useAuthStore } from '../../store/useAuthStore';
 const PAGE_TITLES: Record<string, string> = {
   '/': 'LifeOS Dashboard',
   '/projects': 'Automation Workflows',
-  '/finance': 'Financial Operations',
   '/planning': 'Project Planning',
   '/tasks': 'Task Queue',
   '/tools': 'Tools Library',

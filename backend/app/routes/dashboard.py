@@ -1,9 +1,6 @@
 from flask import Blueprint, current_app
-from sqlalchemy import func
-
 from ..api_response import success_response
-from ..db import db
-from ..models import FinanceEntry, PlanningItem, Project, Task
+from ..models import PlanningItem, Project, Task
 
 
 dashboard_bp = Blueprint('dashboard', __name__)
@@ -18,31 +15,11 @@ def get_dashboard_summary():
     projects = Project.query.count()
     planning_count = PlanningItem.query.count()
 
-    income = (
-        db.session.query(func.coalesce(func.sum(FinanceEntry.amount), 0))
-        .filter(FinanceEntry.entry_type == 'income')
-        .scalar()
-        or 0
-    )
-    expense = (
-        db.session.query(func.coalesce(func.sum(FinanceEntry.amount), 0))
-        .filter(FinanceEntry.entry_type == 'expense')
-        .scalar()
-        or 0
-    )
-    savings = (
-        db.session.query(func.coalesce(func.sum(FinanceEntry.amount), 0))
-        .filter(FinanceEntry.entry_type == 'savings')
-        .scalar()
-        or 0
-    )
-
-    total_balance = float(income) - float(expense) - float(savings)
+    total_balance = 0.0
     current_app.logger.info(
-        '[DB] Dashboard summary rows: tasks=%s, projects=%s, finance_entries=%s, planning_items=%s',
+        '[DB] Dashboard summary rows: tasks=%s, projects=%s, planning_items=%s',
         tasks,
         projects,
-        FinanceEntry.query.count(),
         planning_count,
     )
 

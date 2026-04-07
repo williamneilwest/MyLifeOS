@@ -1,5 +1,5 @@
 import { apiClient } from './apiClient';
-import type { FinanceEntry, PlanningItem, Project, Task } from '../types';
+import type { PlanningItem, Project, Task } from '../types';
 
 interface ListResponse<T> {
   data: T[];
@@ -46,10 +46,6 @@ export function createPlanning(item: PlanningItem) {
 
 export function updatePlanning(itemId: string, updates: Partial<PlanningItem>) {
   return apiClient.patch<PlanningItem>(`/planning/${itemId}`, updates);
-}
-
-export function getFinance() {
-  return apiClient.get<ListResponse<FinanceEntry>>('/finance/');
 }
 
 export interface DashboardSummary {

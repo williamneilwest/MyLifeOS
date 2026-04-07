@@ -95,7 +95,7 @@ export function TopBar() {
         <Button variant="ghost" className="h-10 w-10 rounded-2xl p-0" aria-label="Notifications">
           <Bell className="h-5 w-5" />
         </Button>
-        <Button variant="primary" className="gap-2" onClick={() => navigate('/finance')}>
+        <Button variant="primary" className="gap-2" onClick={() => navigate('/tasks')}>
           <Plus className="h-4 w-4" />
           Quick Add
         </Button>

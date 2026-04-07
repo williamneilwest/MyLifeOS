@@ -31,17 +31,6 @@ export interface Task {
   projectId?: string;
 }
 
-export type FinanceEntryType = 'income' | 'expense' | 'savings';
-
-export interface FinanceEntry {
-  id: string;
-  name: string;
-  category: string;
-  amount: number;
-  type: FinanceEntryType;
-  date: string;
-}
-
 export type GoalCadence = 'weekly' | 'monthly' | 'quarterly';
 
 export interface PlanningItem {

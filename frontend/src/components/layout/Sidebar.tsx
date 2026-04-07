@@ -2,7 +2,6 @@ import { ChevronsLeft, ChevronsRight, LayoutGrid } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { getModuleNavItems } from '../../routes/moduleRegistry';
 import { useAppStore } from '../../store/useAppStore';
-import { FINANCE_OWNER_USERNAME, useAuthStore } from '../../store/useAuthStore';
 import { cn } from '../../utils/cn';
 
 interface SidebarProps {
@@ -14,9 +13,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   const collapsed = useAppStore((state) => state.preferences.sidebarCollapsed);
   const activeModules = useAppStore((state) => state.activeModules);
   const toggleSidebar = useAppStore((state) => state.toggleSidebar);
-  const user = useAuthStore((state) => state.user);
-  const canAccessFinance = user?.username?.trim().toLowerCase() === FINANCE_OWNER_USERNAME;
-  const navItems = getModuleNavItems(activeModules, canAccessFinance);
+  const navItems = getModuleNavItems(activeModules);
 
   return (
     <>

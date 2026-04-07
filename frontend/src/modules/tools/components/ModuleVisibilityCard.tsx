@@ -1,14 +1,11 @@
 import { Card } from '../../../components/ui';
 import { getModuleNavItems } from '../../../routes/moduleRegistry';
 import { useAppStore, type ModuleId } from '../../../store/useAppStore';
-import { FINANCE_OWNER_USERNAME, useAuthStore } from '../../../store/useAuthStore';
 
 export function ModuleVisibilityCard() {
   const activeModules = useAppStore((state) => state.activeModules);
   const setActiveModules = useAppStore((state) => state.setActiveModules);
-  const user = useAuthStore((state) => state.user);
-  const canAccessFinance = user?.username?.trim().toLowerCase() === FINANCE_OWNER_USERNAME;
-  const navItems = getModuleNavItems(['workplace', 'dashboard', 'finance', 'tools', 'database'], canAccessFinance);
+  const navItems = getModuleNavItems(['workplace', 'dashboard', 'tools', 'database']);
 
   function onToggle(moduleId: ModuleId) {
     if (activeModules.includes(moduleId)) {

@@ -76,10 +76,8 @@ For multi-device sync in production:
 3. Deploy static bundle.
 4. Smoke test critical flows:
    - Dashboard loads
-   - Add/update finance entry
    - Create/update project
    - Add/update task
    - Add/update planning goal
    - Add/update homelab service
    - Tools links/snippets and sidebar module toggles
-
